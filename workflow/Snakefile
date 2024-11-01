@@ -1,0 +1,32 @@
+import os, re
+import glob
+import pandas as pd
+
+### Configuration
+configfile: "../config/config.yaml"
+
+ENV_DIR = "../../envs"
+READS_DIR = config["reads_dir"]
+RESULTS_DIR = config["results_dir"]
+
+### Rules to include
+# Function to recursively include all .smk files
+def include_smk_files(directory):
+    for root, _, files in os.walk(directory):
+        files.sort()
+        for file in files:
+            if file.endswith('.smk'):
+                include: os.path.join(root, file)
+
+# Include all .smk files from the rules directory and subdirectories
+include_smk_files('rules/')
+
+### Global rules
+# One rule to rule them all
+rule pipeline_new_phage:
+    output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
+    input: 
+        assembly_report = rules.multiqc_assembly.output,
+        annotation_report = rules.pharokka_plot.output
+    shell: """touch {output}"""
+    
