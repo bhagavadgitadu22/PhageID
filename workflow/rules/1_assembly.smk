@@ -37,9 +37,8 @@ rule multiqc_assembly:
     input: 
         fastp = rules.preprocess_reads.output,
         quast = rules.quality_assembly.output
-    params: os.path.join(RESULTS_DIR, "multiqc_config.yaml")
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_multiqc_assembly.log")
     message: "Running MultiQC"
     shell:
-        """(date && multiqc $(dirname {input.fastp}) $(dirname {input.quast}) --force --config {params} -o $(dirname {output}) && date) &> {log}"""
+        """(date && multiqc $(dirname {input.fastp}) $(dirname {input.quast}) --force --config scripts/multiqc_config.yaml -o $(dirname {output}) && date) &> {log}"""
