@@ -9,6 +9,12 @@ ENV_DIR = "../../envs"
 READS_DIR = config["reads_dir"]
 RESULTS_DIR = config["results_dir"]
 
+# list of phages
+PHAGES_LIST = [
+    sample for sample in glob_wildcards(os.path.join(READS_DIR, "{sample}"))[0]
+    if os.path.isdir(os.path.join(READS_DIR, sample))
+]
+
 ### Rules to include
 # Function to recursively include all .smk files
 def include_smk_files(directory):
@@ -29,4 +35,9 @@ rule pipeline_new_phage:
         assembly_report = rules.multiqc_assembly.output,
         annotation_report = rules.pharokka_plot.output
     shell: """touch {output}"""
+
+rule assembly_all_phages:
+    input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
     
+rule pipeline_all_phages:
+    input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)

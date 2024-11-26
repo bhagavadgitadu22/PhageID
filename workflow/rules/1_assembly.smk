@@ -3,7 +3,7 @@ rule concat_reads:
     input: os.path.join(READS_DIR, "{sample}")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_concat_reads.log")
     shell:
-        """(date && gzip -d {input}/*.fastq.gz && cat {input}/*.fastq > {output} && date) &> {log}"""
+        """cat {input}/*.fastq > {output}"""
 
 rule preprocess_reads:
     output: 
@@ -17,15 +17,16 @@ rule preprocess_reads:
         """(date && fastp -i {input} -o {output.fastq} --html {output.html} --json {output.json} --length_required 1000 --average_qual 20 --cut_front --cut_front_mean_quality 20 && date) &> {log}"""
 
 rule assembly_reads:
-    output: os.path.join(RESULTS_DIR, "{sample}", "unicycler", "assembly.fasta")
+    output: os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly.fasta")
     input: rules.preprocess_reads.output.fastq
     conda: os.path.join(ENV_DIR, "assembly.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_reads.log")
+    threads: 8
     shell:
-        """(date && unicycler -l {input} -o $(dirname {output}) && date) &> {log}"""
+        """(date && flye --nano-hq {input} --out-dir $(dirname {output}) --threads {threads} && date) &> {log}"""
 
 rule quality_assembly:
-    output: os.path.join(RESULTS_DIR, "{sample}", "unicycler", "quast", "report.html")
+    output: os.path.join(RESULTS_DIR, "{sample}", "flye", "quast", "report.html")
     input: rules.assembly_reads.output
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_quality_assembly.log")
