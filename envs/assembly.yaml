@@ -4,4 +4,4 @@ channels:
  - bioconda
  - defaults
 dependencies:
- - flye=2.9.5
+ - unicycler=0.5.1

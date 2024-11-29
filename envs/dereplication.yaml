@@ -1,0 +1,9 @@
+name: dereplication
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+dependencies:
+  - pip
+  - pip:
+      - lovis4u=0.0.11

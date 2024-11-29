@@ -12,7 +12,7 @@ rule db_pharokka:
 rule pharokka_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk")
     input: 
-        virus = rules.assembly_reads.output,
+        virus = rules.filtered_assembly.output,
         db = rules.db_pharokka.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
@@ -23,7 +23,7 @@ rule pharokka_phage:
 rule pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots", "{sample}_annotated_by_pharokka.png")
     input: 
-        virus = rules.assembly_reads.output,
+        virus = rules.filtered_assembly.output,
         pharokka_gbk = rules.pharokka_phage.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
