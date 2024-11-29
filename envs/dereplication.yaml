@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
+  - fastani=1.34
   - pip
   - pip:
       - lovis4u=0.0.11
