@@ -1,5 +1,7 @@
 import sys
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+
 from pycirclize import Circos
 from pycirclize.parser import Gff
 
@@ -14,21 +16,6 @@ def extract_features_by_strand(gff, sign, phase):
     return [rec.to_seq_feature() for rec in filter_gff_records]
 
 def color_track(f_cds_feats, cds_track, begin, end):
-    data_dict = {
-        "nophrog": {"col": "#d3d3d3", "fwd_list": [], "rev_list": []},
-        "vfdb_card": {"col": "#FF0000", "fwd_list": [], "rev_list": []},
-        "unk": {"col": "#AAAAAA", "fwd_list": [], "rev_list": []},
-        "other": {"col": "#4deeea", "fwd_list": [], "rev_list": []},
-        "tail": {"col": "#74ee15", "fwd_list": [], "rev_list": []},
-        "transcription": {"col": "#ffe700", "fwd_list": [], "rev_list": []},
-        "dna": {"col": "#f000ff", "fwd_list": [], "rev_list": []},
-        "lysis": {"col": "#001eff", "fwd_list": [], "rev_list": []},
-        "moron": {"col": "#8900ff", "fwd_list": [], "rev_list": []},
-        "int": {"col": "#E0B0FF", "fwd_list": [], "rev_list": []},
-        "head": {"col": "#ff008d", "fwd_list": [], "rev_list": []},
-        "con": {"col": "#5A5A5A", "fwd_list": [], "rev_list": []},
-    }
-    
     for f in f_cds_feats:
         if ("vfdb_short_name" in f.qualifiers or "AMR_Gene_Family" in f.qualifiers):  # vfdb or CARD
             data_dict["vfdb_card"].append(f)
@@ -87,6 +74,21 @@ circos = Circos(sectors = {sample: size_phage})
 sector = circos.sectors[0]
 
 # gff genotate
+data_dict = {
+        "nophrog": {"col": "#d3d3d3", "fwd_list": [], "rev_list": []},
+        "vfdb_card": {"col": "#FF0000", "fwd_list": [], "rev_list": []},
+        "unk": {"col": "#AAAAAA", "fwd_list": [], "rev_list": []},
+        "other": {"col": "#4deeea", "fwd_list": [], "rev_list": []},
+        "tail": {"col": "#74ee15", "fwd_list": [], "rev_list": []},
+        "transcription": {"col": "#ffe700", "fwd_list": [], "rev_list": []},
+        "dna": {"col": "#f000ff", "fwd_list": [], "rev_list": []},
+        "lysis": {"col": "#001eff", "fwd_list": [], "rev_list": []},
+        "moron": {"col": "#8900ff", "fwd_list": [], "rev_list": []},
+        "int": {"col": "#E0B0FF", "fwd_list": [], "rev_list": []},
+        "head": {"col": "#ff008d", "fwd_list": [], "rev_list": []},
+        "con": {"col": "#5A5A5A", "fwd_list": [], "rev_list": []},
+    }
+    
 track_init = overlapping_track(gff_genotate, "#e3e3e3", sector, 70, 75, 0)
 # Plot xticks & intervals on inner position
 track_init.xticks_by_interval(
@@ -101,5 +103,41 @@ overlapping_track(gff_genotate, "#e3e3e3", sector, 76, 81, 1)
 overlapping_track(gff_genotate, "#e3e3e3", sector, 82, 87, 2)
 
 fig = circos.plotfig()
+
+# Add legend
+handle_phrogs = [
+    Patch(color=data_dict["unk"]["col"], label="Unknown Function"),
+    Patch(color=data_dict["other"]["col"], label="Other Function"),
+    Patch(
+        color=data_dict["transcription"]["col"], label="Transcription Regulation"
+    ),
+    Patch(
+        color=data_dict["dna"]["col"], label="DNA/RNA & nucleotide \n metabolism"
+    ),
+    Patch(color=data_dict["lysis"]["col"], label="Lysis"),
+    Patch(
+        color=data_dict["moron"]["col"],
+        label="Moron, auxiliary metabolic \n gene & host takeover",
+    ),
+    Patch(color=data_dict["int"]["col"], label="Integration & excision"),
+    Patch(color=data_dict["head"]["col"], label="Head & packaging"),
+    Patch(color=data_dict["con"]["col"], label="Connector"),
+    Patch(color=data_dict["tail"]["col"], label="Tail"),
+    Patch(color=data_dict["vfdb_card"]["col"], label="Virulence Factor/AMR"),
+]
+
+phrog_legend_coords = (0.10, 1.185)
+phrog_legend = circos.ax.legend(
+    handles=handle_phrogs,
+    bbox_to_anchor=phrog_legend_coords,
+    fontsize=9.5,
+    loc="center",
+    title="PHROG CDS",
+    handlelength=2,
+)
+
+circos.ax.add_artist(phrog_legend)
+
+# Save final figure
 circos.savefig(sys.argv[4])
 plt.close(fig)
