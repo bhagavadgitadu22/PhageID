@@ -10,7 +10,10 @@ rule db_pharokka:
 
 # Protein annotation of a phage
 rule pharokka_phage:
-    output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk")
+    output: 
+	gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
+	gff = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
+	dnaapler = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "dnaapler", "dnaapler_reoriented.fasta")
     input: 
         virus = rules.filtered_assembly.output,
         db = rules.db_pharokka.output
@@ -18,13 +21,13 @@ rule pharokka_phage:
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
-        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} --dnaapler -o $(dirname {output}) && date) &> {log}"""
+        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} --dnaapler -o $(dirname {output.gbk}) && date) &> {log}"""
 
 rule pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots", "{sample}_annotated_by_pharokka.png")
     input: 
         virus = rules.filtered_assembly.output,
-        pharokka_gbk = rules.pharokka_phage.output
+        pharokka_gbk = rules.pharokka_phage.output.gbk
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
@@ -50,7 +53,7 @@ rule genotate_reformatting:
 rule genotate_pharokka:
     output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "pharokka_proteins_full_merged_output.tsv")
     input: 
-        virus = rules.genotate_reformatting.output,
+        virus = rules.pharokka_phage.output.dnaapler,
         db = rules.db_pharokka.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_annotation.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
@@ -69,8 +72,9 @@ rule genotate_pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "genotate_pharokka.png")
     input:
         metadata = rules.phage_contig_info.output,
-        gff = rules.genotate_pharokka_gff.output
+        gff_genotate = rules.genotate_pharokka_gff.output,
+	gff_pharokka = rules.pharokka_phage.output.gff
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_gff_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
-        """(date && python scripts/plotting_pharokka_genotate.py {wildcards.sample} $(tail -n +2 {input.metadata} | cut -f 3) {input.gff} {output} && date) &> {log}"""
+        """(date && python scripts/plotting_pharokka_genotate.py {wildcards.sample} $(tail -n +2 {input.metadata} | cut -f 3) {input.gff_genotate} {input.gff_pharokka} {output} && date) &> {log}"""

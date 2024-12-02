@@ -1,0 +1,63 @@
+##gff-version 3
+Rahnella311_T1_1_1	genotate_0.15	CDS	79	420	.	-	0	ID=Rahnella311_T1_1_1_79_420;phrog=144;function=DNA;product=DNA
+Rahnella311_T1_1_1	genotate_0.15	CDS	404	691	.	-	1	ID=Rahnella311_T1_1_1_404_691;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	980	1306	.	-	1	ID=Rahnella311_T1_1_1_980_1306;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	1353	2027	.	-	2	ID=Rahnella311_T1_1_1_1353_2027;phrog=669;function=lysis;product=lysis
+Rahnella311_T1_1_1	genotate_0.15	CDS	2032	2355	.	-	0	ID=Rahnella311_T1_1_1_2032_2355;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	2419	2949	.	-	0	ID=Rahnella311_T1_1_1_2419_2949;phrog=824;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	2952	3023	.	-	2	ID=Rahnella311_T1_1_1_2952_3023;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	3160	3705	.	-	0	ID=Rahnella311_T1_1_1_3160_3705;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	3632	4003	.	-	1	ID=Rahnella311_T1_1_1_3632_4003;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	4485	4820	.	-	2	ID=Rahnella311_T1_1_1_4485_4820;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	4832	5140	.	-	1	ID=Rahnella311_T1_1_1_4832_5140;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	5183	5326	.	+	1	ID=Rahnella311_T1_1_1_5183_5326;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	5247	5453	.	-	2	ID=Rahnella311_T1_1_1_5247_5453;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	5592	5744	.	-	2	ID=Rahnella311_T1_1_1_5592_5744;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	5745	5990	.	-	2	ID=Rahnella311_T1_1_1_5745_5990;phrog=12748;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	5996	6547	.	-	1	ID=Rahnella311_T1_1_1_5996_6547;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	6625	9465	.	-	0	ID=Rahnella311_T1_1_1_6625_9465;phrog=3022;function=DNA;product=DNA
+Rahnella311_T1_1_1	genotate_0.15	CDS	9465	9689	.	-	2	ID=Rahnella311_T1_1_1_9465_9689;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	9774	10490	.	+	2	ID=Rahnella311_T1_1_1_9774_10490;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	10502	11509	.	+	1	ID=Rahnella311_T1_1_1_10502_11509;phrog=6015;function=DNA;product=DNA
+Rahnella311_T1_1_1	genotate_0.15	CDS	11572	12603	.	+	0	ID=Rahnella311_T1_1_1_11572_12603;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	12606	14210	.	+	2	ID=Rahnella311_T1_1_1_12606_14210;phrog=16;function=DNA;product=DNA
+Rahnella311_T1_1_1	genotate_0.15	CDS	14207	14515	.	+	1	ID=Rahnella311_T1_1_1_14207_14515;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	14557	15411	.	+	0	ID=Rahnella311_T1_1_1_14557_15411;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	15460	15726	.	+	0	ID=Rahnella311_T1_1_1_15460_15726;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	15753	16019	.	+	2	ID=Rahnella311_T1_1_1_15753_16019;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	16085	16288	.	-	1	ID=Rahnella311_T1_1_1_16085_16288;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	16392	16631	.	-	2	ID=Rahnella311_T1_1_1_16392_16631;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	16771	17274	.	-	0	ID=Rahnella311_T1_1_1_16771_17274;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	17392	20526	.	-	0	ID=Rahnella311_T1_1_1_17392_20526;phrog=2589;function=tail;product=tail
+Rahnella311_T1_1_1	genotate_0.15	CDS	20587	21396	.	-	0	ID=Rahnella311_T1_1_1_20587_21396;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	21402	22598	.	-	2	ID=Rahnella311_T1_1_1_21402_22598;phrog=14987;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	23420	23500	.	-	1	ID=Rahnella311_T1_1_1_23420_23500;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	23449	24051	.	-	0	ID=Rahnella311_T1_1_1_23449_24051;phrog=4554;function=tail;product=tail
+Rahnella311_T1_1_1	genotate_0.15	CDS	24054	24791	.	-	2	ID=Rahnella311_T1_1_1_24054_24791;phrog=2552;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	24799	25509	.	-	0	ID=Rahnella311_T1_1_1_24799_25509;phrog=18;function=tail;product=tail
+Rahnella311_T1_1_1	genotate_0.15	CDS	25512	25850	.	-	2	ID=Rahnella311_T1_1_1_25512_25850;phrog=14;function=tail;product=tail
+Rahnella311_T1_1_1	genotate_0.15	CDS	25906	26196	.	-	0	ID=Rahnella311_T1_1_1_25906_26196;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	26177	26359	.	-	1	ID=Rahnella311_T1_1_1_26177_26359;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	26364	27116	.	-	2	ID=Rahnella311_T1_1_1_26364_27116;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	27119	27865	.	-	1	ID=Rahnella311_T1_1_1_27119_27865;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	27911	28408	.	-	1	ID=Rahnella311_T1_1_1_27911_28408;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	28503	30749	.	-	2	ID=Rahnella311_T1_1_1_28503_30749;phrog=30701;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	30763	30969	.	-	0	ID=Rahnella311_T1_1_1_30763_30969;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	30969	31343	.	-	2	ID=Rahnella311_T1_1_1_30969_31343;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	31414	32415	.	-	0	ID=Rahnella311_T1_1_1_31414_32415;phrog=158;function=tail;product=tail
+Rahnella311_T1_1_1	genotate_0.15	CDS	32433	32807	.	-	2	ID=Rahnella311_T1_1_1_32433_32807;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	32794	33345	.	-	0	ID=Rahnella311_T1_1_1_32794_33345;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	33329	33628	.	-	1	ID=Rahnella311_T1_1_1_33329_33628;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	33576	33701	.	-	2	ID=Rahnella311_T1_1_1_33576_33701;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	33674	34018	.	-	1	ID=Rahnella311_T1_1_1_33674_34018;phrog=40;function=connector;product=connector
+Rahnella311_T1_1_1	genotate_0.15	CDS	34071	34358	.	-	2	ID=Rahnella311_T1_1_1_34071_34358;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	34367	35578	.	-	1	ID=Rahnella311_T1_1_1_34367_35578;phrog=10;function=head and packaging;product=head and packaging
+Rahnella311_T1_1_1	genotate_0.15	CDS	35592	36221	.	-	2	ID=Rahnella311_T1_1_1_35592_36221;phrog=80;function=head and packaging;product=head and packaging
+Rahnella311_T1_1_1	genotate_0.15	CDS	36199	37542	.	-	0	ID=Rahnella311_T1_1_1_36199_37542;phrog=12;function=head and packaging;product=head and packaging
+Rahnella311_T1_1_1	genotate_0.15	CDS	37560	39407	.	-	2	ID=Rahnella311_T1_1_1_37560_39407;phrog=2699;function=head and packaging;product=head and packaging
+Rahnella311_T1_1_1	genotate_0.15	CDS	39410	39496	.	-	1	ID=Rahnella311_T1_1_1_39410_39496;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	39499	39993	.	-	0	ID=Rahnella311_T1_1_1_39499_39993;phrog=83;function=head and packaging;product=head and packaging
+Rahnella311_T1_1_1	genotate_0.15	CDS	39994	40311	.	-	0	ID=Rahnella311_T1_1_1_39994_40311;phrog=No_PHROG;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	40311	40556	.	-	2	ID=Rahnella311_T1_1_1_40311_40556;phrog=5016;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	40537	40875	.	-	0	ID=Rahnella311_T1_1_1_40537_40875;phrog=1372;function=unknown function;product=unknown function
+Rahnella311_T1_1_1	genotate_0.15	CDS	40871	41176	.	-	1	ID=Rahnella311_T1_1_1_40871_41176;phrog=No_PHROG;function=unknown function;product=unknown function
