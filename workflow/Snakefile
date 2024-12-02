@@ -38,6 +38,10 @@ rule pipeline_new_phage:
 
 rule assembly_all_phages:
     input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
-    
+
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
+
+# Other
+rule genotate_all_phages:
+    input: expand(os.path.join(RESULTS_DIR, "{sample}", "genotate"), sample = PHAGES_LIST)

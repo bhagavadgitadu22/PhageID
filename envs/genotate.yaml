@@ -1,0 +1,10 @@
+name: genotate
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+dependencies:
+  - pip
+  - pip:
+      - genotate
+      - tensorflow==2.10.0
