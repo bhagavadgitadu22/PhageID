@@ -18,7 +18,7 @@ rule pharokka_phage:
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
-        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} -o $(dirname {output}) && date) &> {log}"""
+        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} --dnaapler -o $(dirname {output}) && date) &> {log}"""
 
 rule pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots", "{sample}_annotated_by_pharokka.png")
@@ -28,4 +28,4 @@ rule pharokka_plot:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
-        """(date && pharokka_plotter.py -i {input.virus} -n $(echo {output} | sed 's/.png//') -o $(dirname {input.pharokka_gbk}) && date) &> {log}"""
+        """(date && pharokka_plotter.py -i {input.virus} -n $(echo {output} | sed 's/.png//') --truncate 30 -o $(dirname {input.pharokka_gbk}) && date) &> {log}"""

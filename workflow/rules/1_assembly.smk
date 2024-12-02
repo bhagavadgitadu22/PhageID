@@ -49,11 +49,7 @@ rule depths_per_contig:
     shell:
         """(date && 
         grep -P 'S\t' {input} | cut -f 2,5 | sed 's/dp:f://' > {output.depths} && 
-        if [ $(wc -l < {output.depths}) -eq 1 ]; then
-            cut -f 1 {output.depths}
-        else
-            awk 'NR==1 {{next}} {{if ($2 >= 0.1 * max) print $1}}' max=$(cut -f 2 {output.depths} | sort -n | tail -1) {output.depths}
-        fi > {output.list_contigs} &&
+        awk '{{if ($2 >= 0.1 * max) print $1}}' max=$(cut -f 2 {output.depths} | sort -n | tail -1) {output.depths} > {output.list_contigs} &&
         date) &> {log}"""
 
 rule filtered_assembly:
@@ -64,7 +60,8 @@ rule filtered_assembly:
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_depths_per_contig.log")
     shell:
-        """(date && seqtk subseq {input.assembly} {input.list_contigs} > {output} && date) &> {log}"""
+        """(date && seqtk subseq {input.assembly} {input.list_contigs} > {output} && 
+        sed -i "s/>/>{wildcards.sample}_/" {output} && date) &> {log}"""
 
 rule quality_assembly:
     output: os.path.join(RESULTS_DIR, "{sample}", "flye", "quast", "report.html")

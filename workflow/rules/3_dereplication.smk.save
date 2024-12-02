@@ -15,14 +15,13 @@ rule copy_files_genus:
     log: os.path.join(RESULTS_DIR, "logs", "{genus}_copy_files.log")
     shell:
         """(date && mkdir -p $(dirname {output.fasta} | xargs dirname) && mkdir -p $(dirname {output.fasta}) &&
-            mkdir -p {output.fasta} && mkdir -p {output.gff} && mkdir -p {output.pharokka_plot} &&
+            mkdir -p {output.fasta} && mkdir -p {output.gff} &&
             for f in {input}; do 
                 name=$(dirname $f | xargs dirname | xargs basename);
                 ln -s $f {output.fasta}/unicycler_${{name}}.fasta;
-                gff_file=$(echo $f | sed 's/unicycler\/filtered_assembly.fasta/pharokka\/pharokka.gff/');
-                plot_file=$(echo $f | sed 's/unicycler\/filtered_assembly.fasta/pharokka\/plots\/${{name}}_annotated_by_pharokka.png/');
-                ln -s $gff_file {output.gff}/pharokka_${{name}}.gff;
-                ln -s $plot_file {output.pharokka_plot}/${{name}}_annotated_by_pharokka.png;
+                gff_file = 
+                ln -s ${{f/unicycler\/filtered_assembly.fasta/pharokka\/pharokka.gff}} {output.gff}/pharokka_${{name}}.gff;
+                ln -s ${{f/unicycler\/filtered_assembly.fasta/pharokka\/plots\/${{name}}_annotated_by_pharokka.png}} {output.pharokka_plot}/${{name}}_annotated_by_pharokka.png;
             done && date) &> {log}"""
 
 # Comparison of phages' sequences relative to this host
