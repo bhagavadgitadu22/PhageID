@@ -88,26 +88,9 @@ gff_genotate = Gff(sys.argv[3])
 gff_pharokka = Gff(sys.argv[4])
 
 circos = Circos(sectors = {sample: size_phage})
-circos.text(sample, size=20, r=190)
-
 sector = circos.get_sector(sample)
 
 # gff genotate
-data_dict_legend = {
-        "nophrog": {"col": "#d3d3d3", "fwd_list": [], "rev_list": []},
-        "vfdb_card": {"col": "#FF0000", "fwd_list": [], "rev_list": []},
-        "unk": {"col": "#AAAAAA", "fwd_list": [], "rev_list": []},
-        "other": {"col": "#4deeea", "fwd_list": [], "rev_list": []},
-        "tail": {"col": "#74ee15", "fwd_list": [], "rev_list": []},
-        "transcription": {"col": "#ffe700", "fwd_list": [], "rev_list": []},
-        "dna": {"col": "#f000ff", "fwd_list": [], "rev_list": []},
-        "lysis": {"col": "#001eff", "fwd_list": [], "rev_list": []},
-        "moron": {"col": "#8900ff", "fwd_list": [], "rev_list": []},
-        "int": {"col": "#E0B0FF", "fwd_list": [], "rev_list": []},
-        "head": {"col": "#ff008d", "fwd_list": [], "rev_list": []},
-        "con": {"col": "#5A5A5A", "fwd_list": [], "rev_list": []},
-    }
-    
 track_init = overlapping_track(gff_genotate, "#e3e3e3", sector, 66, 70, 0)
 # Plot xticks & intervals on inner position
 track_init.xticks_by_interval(
@@ -121,41 +104,9 @@ track_init.xticks_by_interval(
 overlapping_track(gff_genotate, "#e3e3e3", sector, 71, 75, 1)
 overlapping_track(gff_genotate, "#e3e3e3", sector, 76, 80, 2)
 
-overlapping_track(gff_pharokka, "#e3e3e3", sector, 81, 86, 0)
+overlapping_track(gff_pharokka, "#e3e3e3", sector, 81, 87, 0)
 
 fig = circos.plotfig()
-
-# Add legend
-handle_phrogs = [
-    Patch(color=data_dict_legend["unk"]["col"], label="Unknown Function"),
-    Patch(color=data_dict_legend["other"]["col"], label="Other Function"),
-    Patch(
-        color=data_dict_legend["transcription"]["col"], label="Transcription Regulation"
-    ),
-    Patch(
-        color=data_dict_legend["dna"]["col"], label="DNA/RNA & nucleotide \n metabolism"
-    ),
-    Patch(color=data_dict_legend["lysis"]["col"], label="Lysis"),
-    Patch(
-        color=data_dict_legend["moron"]["col"],
-        label="Moron, auxiliary metabolic \n gene & host takeover",
-    ),
-    Patch(color=data_dict_legend["int"]["col"], label="Integration & excision"),
-    Patch(color=data_dict_legend["head"]["col"], label="Head & packaging"),
-    Patch(color=data_dict_legend["con"]["col"], label="Connector"),
-    Patch(color=data_dict_legend["tail"]["col"], label="Tail"),
-    Patch(color=data_dict_legend["vfdb_card"]["col"], label="Virulence Factor/AMR"),
-]
-
-phrog_legend_coords = (0.10, 1.185)
-phrog_legend = circos.ax.legend(
-    handles=handle_phrogs,
-    bbox_to_anchor=phrog_legend_coords,
-    fontsize=9.5,
-    loc="center",
-    title="PHROG CDS",
-    handlelength=2,
-)
 
 # Save final figure
 circos.savefig(sys.argv[5], dpi=600)
