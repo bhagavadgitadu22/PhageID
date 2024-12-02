@@ -1,6 +1,6 @@
 ### TO-MODIFY: Location of directories
-#reads_dir: "/home/river/Desktop/akira_vir/input_files"
-#results_dir: "/home/river/Desktop/akira_vir/output_files"
-reads_dir: "/mnt/c/Users/boutroux/Documents/AKIRA_PROJECT/Sequences_raw"
-results_dir: "/mnt/c/Users/boutroux/Documents/AKIRA_PROJECT/Sequences_analyzed"
+reads_dir: "/home/river/Desktop/akira_vir/input_files"
+results_dir: "/home/river/Desktop/akira_vir/output_files"
+#reads_dir: "/mnt/c/Users/boutroux/Documents/AKIRA_PROJECT/Sequences_raw"
+#results_dir: "/mnt/c/Users/boutroux/Documents/AKIRA_PROJECT/Sequences_analyzed"
 

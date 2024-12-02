@@ -18,7 +18,7 @@ rule pharokka_phage:
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
-        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} -o $(dirname {output}) && date) &> {log}"""
+        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} --dnaapler -o $(dirname {output}) && date) &> {log}"""
 
 rule pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots", "{sample}_annotated_by_pharokka.png")
