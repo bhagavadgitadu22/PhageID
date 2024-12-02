@@ -81,3 +81,10 @@ rule multiqc_assembly:
     message: "Running MultiQC"
     shell:
         """(date && multiqc $(dirname {input.fastp}) $(dirname {input.quast}) --force --config scripts/multiqc_config.yaml -o $(dirname {output}) && date) &> {log}"""
+
+rule phage_contig_info:
+    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv")
+    input: rules.filtered_assembly.output
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_stats.log")
+    shell:
+        """(date && ./scripts/contig_info.sh -m 1000 -t {input} > {output} && date) &> {log}"""

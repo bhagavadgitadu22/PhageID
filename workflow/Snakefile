@@ -44,4 +44,4 @@ rule pipeline_all_phages:
 
 # Other
 rule genotate_all_phages:
-    input: expand(os.path.join(RESULTS_DIR, "{sample}", "genotate"), sample = PHAGES_LIST)
+    input: expand(rules.genotate_pharokka.output, sample = PHAGES_LIST)
