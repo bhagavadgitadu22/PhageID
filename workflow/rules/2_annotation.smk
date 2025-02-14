@@ -72,7 +72,7 @@ rule genotate_pharokka_gff:
         """(date && python scripts/reformat_pharokka_genotate.py {wildcards.sample} $(tail -n +2 {input.metadata} | cut -f 3) {input.genes} {input.fasta} {output} && date) &> {log}"""
 
 rule genotate_pharokka_plot:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "genotate_pharokka.png")
+    output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "{sample}_annotated_by_genotate_pharokka.png")
     input:
         metadata = rules.phage_contig_info.output,
         gff_genotate = rules.genotate_pharokka_gff.output,
