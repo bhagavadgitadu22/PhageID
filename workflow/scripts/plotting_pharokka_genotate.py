@@ -121,7 +121,7 @@ track_init.xticks_by_interval(
 overlapping_track(gff_genotate, "#e3e3e3", sector, 71, 75, 1)
 overlapping_track(gff_genotate, "#e3e3e3", sector, 76, 80, 2)
 
-overlapping_track(gff_pharokka, "#e3e3e3", sector, 81, 86, 0)
+overlapping_track(gff_pharokka, "#e3e3e3", sector, 84, 90, 0)
 
 fig = circos.plotfig()
 

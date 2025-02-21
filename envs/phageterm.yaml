@@ -1,0 +1,10 @@
+name: assembly
+channels:
+ - conda-forge
+ - bioconda
+ - defaults
+dependencies:
+ - python=3.9
+ - pip
+  - pip:
+      - poetry==2.0.1

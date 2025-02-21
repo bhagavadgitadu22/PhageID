@@ -73,8 +73,38 @@ rule genotate_pharokka_plot:
     input:
         metadata = rules.phage_contig_info.output,
         gff_genotate = rules.genotate_pharokka_gff.output,
-	gff_pharokka = rules.pharokka_phage.output.gff
+	    gff_pharokka = rules.pharokka_phage.output.gff
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_gff_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
         """(date && python scripts/plotting_pharokka_genotate.py {wildcards.sample} $(tail -n +2 {input.metadata} | cut -f 3) {input.gff_genotate} {input.gff_pharokka} {output} && date) &> {log}"""
+
+# Termination
+rule phageterm_preparation:
+    output: os.path.join(RESULTS_DIR, "logs", "phageterm_preparation.txt")
+    input: os.path.join(ENV_DIR, "PhageTerm")
+    log: os.path.join(RESULTS_DIR, "logs", "phageterm_preparation.log")
+    conda: os.path.join(ENV_DIR, "phageterm.yaml")
+    message: "Preparing PhageTermVirome"
+    shell:
+        """(date && cd {input} &&
+        export SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True &&
+        wget https://files.pythonhosted.org/packages/ef/89/50321c714580c79d431cd9eb12aa62dc49e6f44afbe4e3efae282c9138ff/phagetermvirome-4.3.tar.gz &&
+        tar -xzf phagetermvirome-4.3.tar.gz &&
+        cd phagetermvirome-4.3 &&
+        poetry install &&
+        poetry shell &&
+        touch {output} &&
+        date) &> {log}"""
+
+rule phageterm:
+    output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "{sample}_PhageTerm_report.pdf")
+    input:
+        reads = rules.preprocess_reads_fastplong.output.fastq
+        virus = rules.filtered_assembly.output
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log")
+    conda: os.path.join(ENV_DIR, "phageterm.yaml")
+    threads: 8
+    shell:
+        """(date && export PYTHONPATH={input}/phagetermvirome-4.3/phagetermvirome && 
+        phageterm -c {threads} -f {input.reads} -r {input.virus} --report_title {output} && date) &> {log}"""
