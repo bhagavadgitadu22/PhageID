@@ -3,7 +3,7 @@ import re
 import sys
 
 gffs = {}
-with open(sys.argv[1], newline='') as csvfile:
+with open(sys.argv[3], newline='') as csvfile:
     spamreader = csv.reader(csvfile, delimiter='\t', quotechar='|')
     for row in spamreader:
         name = row[0]
@@ -36,7 +36,11 @@ with open(sys.argv[1], newline='') as csvfile:
 for contig in gffs:
     print(contig)
     contig_renamed = contig.replace("/", "_")
-    with open(sys.argv[2], 'w', newline='') as gff_file:
+    with open(sys.argv[5], 'w', newline='') as gff_file:
         writer = csv.writer(gff_file)
         writer.writerow(["##gff-version 3"])
+        writer.writerow(["##sequence "+str(sys.argv[1])+" "+str(sys.argv[2])])
         writer.writerows(gffs[contig])
+        writer.writerow(["##FASTA"])
+        with open(sys.argv[4], 'r') as source:
+            gff_file.write(source.read())

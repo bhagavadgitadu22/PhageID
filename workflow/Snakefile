@@ -33,7 +33,8 @@ rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
     input: 
         assembly_report = rules.multiqc_assembly.output,
-        annotation_report = rules.pharokka_plot.output
+        pharokka_plot = rules.pharokka_plot.output,
+        genotate_plot = rules.genotate_pharokka_plot.output
     shell: """touch {output}"""
 
 rule assembly_all_phages:
@@ -42,6 +43,3 @@ rule assembly_all_phages:
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
 
-# Other
-rule genotate_all_phages:
-    input: expand(rules.genotate_pharokka.output, sample = PHAGES_LIST)
