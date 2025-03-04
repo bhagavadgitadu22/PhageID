@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "phagetermvirome"
+version = "4.3"
+description = "Using sequencing bias to identify phages terminii and phage genome packaging."
+authors = ["Marc Monot <marc.monot@pasteur.fr>",
+           "Julian Garneau <julian.garneau@unil.ch>",
+           "Veronique Legrand <veronique.legrand@pasteur.fr>"]
+license = "AGPLv3+"
+readme = "README.md"
+packages = [ {include ="phagetermvirome/*.py"} ]
+include = [ {path = "test-data" } ]
+# include = [ {path = "data-virome" } ] # Finally don't include these files because the archive is too big then.
+
+[tool.poetry.scripts]
+phageterm = 'phagetermvirome.PhageTerm:main'
+
+[tool.poetry.dependencies]
+python = [">=3.9,<3.13"]
+numpy = "^1.25.2"
+matplotlib = "^3.7.2"
+pandas = "^2.1.0"
+reportlab = "^4.0.4"
+scipy = "^1.11.2"
+statsmodels = "^0.14.0"
+sklearn = "^0.0.post7"
+scikit-learn = "^1.3.0"
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

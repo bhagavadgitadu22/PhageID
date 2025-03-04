@@ -3,9 +3,9 @@ import glob
 import pandas as pd
 
 ### Configuration
-configfile: "../config/config.yaml"
+configfile: os.getcwd()+"/../config/config.yaml"
 
-ENV_DIR = "../../envs"
+ENV_DIR = os.getcwd()+"/../envs"
 READS_DIR = config["reads_dir"]
 RESULTS_DIR = config["results_dir"]
 
@@ -34,12 +34,19 @@ rule pipeline_new_phage:
     input: 
         assembly_report = rules.multiqc_assembly.output,
         pharokka_plot = rules.pharokka_plot.output,
-        genotate_plot = rules.genotate_pharokka_plot.output
+        genotate_plot = rules.genotate_pharokka_plot.output,
+        defenseFinder_report = rules.antiDefenseFinder.output, 
+        phageterm_report = rules.phageterm.output,
+        vibrant_report = rules.vibrant.output,
+        genomad_report = rules.genomad.output,
+        checkv_report = rules.checkv.output
     shell: """touch {output}"""
 
 rule assembly_all_phages:
+    input: expand(rules.assembly_reads_flye.output.assembly, sample = PHAGES_LIST)
+
+rule filtered_assembly_all_phages:
     input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
 
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
-

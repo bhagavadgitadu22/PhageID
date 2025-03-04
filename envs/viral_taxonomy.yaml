@@ -1,0 +1,7 @@
+name: viral_taxonomy
+channels:
+ - conda-forge
+ - bioconda
+ - defaults
+dependencies:
+ - genomad=1.9.0

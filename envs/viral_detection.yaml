@@ -1,0 +1,9 @@
+name: viral_detection
+channels:
+ - conda-forge
+ - bioconda
+ - defaults
+dependencies:
+ - diamond=2.0.4
+ - checkv=1.0.3
+ - vibrant=1.2.1

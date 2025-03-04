@@ -33,7 +33,7 @@ def color_track(f_cds_feats, cds_track, begin, end):
 
     for f in f_cds_feats:
         if ("vfdb_short_name" in f.qualifiers or "AMR_Gene_Family" in f.qualifiers):  # vfdb or CARD
-            data_dict["vfdb_card"].append(f)
+            data_dict["vfdb_card"]["fwd_list"].append(f)
         else:  # no vfdb or card
             if f.qualifiers.get("phrog")[0] == "No_PHROG":
                 data_dict["nophrog"]["fwd_list"].append(f)
