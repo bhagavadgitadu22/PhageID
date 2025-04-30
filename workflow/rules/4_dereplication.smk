@@ -1,7 +1,7 @@
 # Copy all fasta and gff from phages of a host in a common directory
 rule copy_files_genus:
     output: 
-        fasta = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "unicycler_sequences")),
+        fasta = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "flye_assemblies")),
         gff_pharokka = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "pharokka_annotations")),
         gff_genotate = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "genotate_annotations")),
         pharokka_plot = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "pharokka_plots")),
@@ -9,10 +9,10 @@ rule copy_files_genus:
     input: 
         # Match all directories starting with genus
         lambda wildcards: sorted(
-            [os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly_flye.fasta") 
+            [os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly.fasta") 
             for d in os.listdir(RESULTS_DIR) 
             if d.startswith(wildcards.genus + "_") 
-            and os.path.exists(os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly_flye.fasta"))]
+            and os.path.exists(os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly.fasta"))]
         )
     log: os.path.join(RESULTS_DIR, "logs", "{genus}_copy_files.log")
     shell:
@@ -21,12 +21,12 @@ rule copy_files_genus:
             mkdir -p {output.pharokka_plot} && mkdir -p {output.genotate_plot}
             for f in {input}; do 
                 name=$(dirname $f | xargs dirname | xargs basename);
-                ln -s $f {output.fasta}/unicycler_${{name}}.fasta;
+                ln -s $f {output.fasta}/${{name}}.fasta;
                 
-                gff_pharokka=$(echo $f | sed 's/flye\/filtered_assembly_flye.fasta/pharokka\/pharokka.gff/');
-                gff_genotate=$(echo $f | sed 's/flye\/filtered_assembly_flye.fasta/genotate\/genotate_annotation\/genotate_pharokka.gff/');
-                plot_pharokka=$(echo $f | sed "s/flye\/filtered_assembly_flye.fasta/pharokka\/plots\/${{name}}_annotated_by_pharokka.png/");
-                plot_genotate=$(echo $f | sed 's/flye\/filtered_assembly_flye.fasta/genotate\/genotate_annotation\/genotate_pharokka.png/');
+                gff_pharokka=$(echo $f | sed 's/flye\/filtered_assembly.fasta/pharokka\/pharokka.gff/');
+                gff_genotate=$(echo $f | sed 's/flye\/filtered_assembly.fasta/genotate\/genotate_annotation\/genotate_pharokka.gff/');
+                plot_pharokka=$(echo $f | sed "s/flye\/filtered_assembly.fasta/pharokka\/plots\/${{name}}_annotated_by_pharokka.png/");
+                plot_genotate=$(echo $f | sed "s/flye\/filtered_assembly.fasta/genotate\/genotate_annotation\/${{name}}_annotated_by_genotate_pharokka.png/");
                 echo $plot_pharokka
                 
                 ln -s $gff_pharokka {output.gff_pharokka}/pharokka_${{name}}.gff;
@@ -73,3 +73,4 @@ rule lovis4u_genotate:
     log: os.path.join(RESULTS_DIR, "logs", "{genus}_lovis4u_genotate.log")
     shell:
         """(date && lovis4u -gff {input.gff} --reorient_loci --use-filename-as-id --homology-links --set-category-colour --run-hmmscan -o $(dirname {output}) && date) &> {log}"""
+

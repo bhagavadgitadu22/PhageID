@@ -28,6 +28,13 @@ def include_smk_files(directory):
 include_smk_files('rules/')
 
 ### Global rules
+# Assembly rules
+rule assembly_all_phages:
+    input: expand(rules.assembly_reads_flye.output.assembly, sample = PHAGES_LIST)
+
+rule filtered_assembly_all_phages:
+    input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
+
 # One rule to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
@@ -41,12 +48,15 @@ rule pipeline_new_phage:
         genomad_report = rules.genomad.output,
         checkv_report = rules.checkv.output
     shell: """touch {output}"""
-
-rule assembly_all_phages:
-    input: expand(rules.assembly_reads_flye.output.assembly, sample = PHAGES_LIST)
-
-rule filtered_assembly_all_phages:
-    input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
-
+    
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
+
+# Rule for a whole host
+rule pipeline_one_host:
+    output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "done.touch")
+    input:
+	    ani = rules.fast_ani.output.fastani,
+	    pharokka = rules.lovis4u_pharokka.output,
+	    genotate = rules.lovis4u_genotate.output
+    shell: """touch {output}"""
