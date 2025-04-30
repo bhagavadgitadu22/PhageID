@@ -8,3 +8,4 @@ dependencies:
   - biopython=1.80
   - gsl=2.7.0
   - dnaapler=0.8.1
+  - phold=0.2.0
