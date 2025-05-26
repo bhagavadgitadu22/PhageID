@@ -3,8 +3,15 @@ rule concat_reads:
     input: os.path.join(READS_DIR, "{sample}")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_concat_reads.log")
     shell:
-        """cat {input}/*.fastq > {output}"""
+        """for f in {input}/*; do
+            if [[ "$f" == *.gz ]]; then
+                gzip -dc "$f"
+            else
+                cat "$f"
+            fi
+        done > {output}"""
 
+# i can add --reads_to_process 100000 to reduce size input
 rule preprocess_reads_fastplong:
     output: 
         fastq = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.{sample}.fastq"),
@@ -29,6 +36,7 @@ rule assembly_reads_unicycler:
     shell:
         """(date && unicycler -t {threads} -l {input} -o $(dirname {output.assembly}) && date) &> {log}"""
 
+# meta recommended for extrachromosomal elements like phages or plasmids
 rule assembly_reads_flye:
     output:
         assembly = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly.fasta"),

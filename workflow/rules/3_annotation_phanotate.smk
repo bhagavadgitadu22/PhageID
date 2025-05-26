@@ -55,13 +55,13 @@ rule phold_phage:
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
-        """(date && phold run -t {threads} -i {input.gbk} -d --cpu -o $(dirname {output.gbk}) && date) &> {log}"""
+        """(date && phold run -t {threads} --force -i {input.gbk} -d {input.db} --cpu -o $(dirname {output.gbk}) && date) &> {log}"""
 
 rule phold_plot:
-    output: os.path.join(RESULTS_DIR, "{sample}", "phold", "plots", "{sample}_annotated_by_phold.png")
+    output: directory(os.path.join(RESULTS_DIR, "{sample}", "phold", "plots"))
     input: 
         phold_gbk = rules.phold_phage.output.gbk
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_phold_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
-        """(date && phold plot -i {input.phold_gbk} -p $(echo {output} | sed 's/.png//') -o $(dirname {input.phold_gbk}) && date) &> {log}"""
+        """(date && phold plot --force -i {input.phold_gbk} -o {output} && date) &> {log}"""
