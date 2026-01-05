@@ -1,35 +1,36 @@
-rule concat_reads:
-    output: os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
-    input: os.path.join(READS_DIR, "{sample}")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_concat_reads.log")
-    shell:
-        """for f in {input}/*; do
-            if [[ "$f" == *.gz ]]; then
-                gzip -dc "$f"
-            else
-                cat "$f"
-            fi
-        done > {output}"""
+#rule concat_reads:
+#    output: os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
+#    input: os.path.join(READS_DIR, "{sample}")
+#    log: os.path.join(RESULTS_DIR, "logs", "{sample}_concat_reads.log")
+#    shell:
+#        """for f in {input}/*; do
+#            if [[ "$f" == *.gz ]]; then
+#                gzip -dc "$f"
+#            else
+#                cat "$f"
+#            fi
+#        done > {output}"""
 
 # i can add --reads_to_process 100000 to reduce size input
-rule preprocess_reads_fastplong:
-    output: 
-        fastq = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.{sample}.fastq"),
-        html = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.html"),
-        json = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.json")
-    input: rules.concat_reads.output
-    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_preprocess_reads_fastplong.log")
-    threads: 4
-    shell:
-        """(date && fastplong -t {threads} -i {input} -o {output.fastq} --html {output.html} --json {output.json} --length_required 1000 && date) &> {log}"""
+#rule preprocess_reads_fastplong:
+#    output: 
+#        fastq = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.{sample}.fastq"),
+#        html = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.html"),
+#        json = os.path.join(RESULTS_DIR, "{sample}", "reads", "fastplong.json")
+#    input: rules.concat_reads.output
+#    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+#    log: os.path.join(RESULTS_DIR, "logs", "{sample}_preprocess_reads_fastplong.log")
+#    threads: 4
+#    shell:
+#        """(date && fastplong -t {threads} -i {input} -o {output.fastq} --html {output.html} --json {output.json} --length_required 1000 && date) &> {log}"""
 
 # Assembling
 rule assembly_reads_unicycler:
     output: 
         assembly = os.path.join(RESULTS_DIR, "{sample}", "unicycler", "assembly.fasta"),
         graph = os.path.join(RESULTS_DIR, "{sample}", "unicycler", "assembly.gfa")
-    input: rules.preprocess_reads_fastplong.output.fastq
+    #input: rules.concat_reads.output
+    input: os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
     conda: os.path.join(ENV_DIR, "assembly.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_reads_unicycler.log")
     threads: 8
@@ -42,7 +43,8 @@ rule assembly_reads_flye:
         assembly = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly.fasta"),
         graph = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly_graph.gfa"),
         info = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly_info.txt")
-    input: rules.preprocess_reads_fastplong.output.fastq
+#    input: rules.concat_reads.output
+    input: os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
     conda: os.path.join(ENV_DIR, "assembly_flye.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_reads_flye.log")
     threads: 20
@@ -119,13 +121,14 @@ rule quality_assembly:
 rule multiqc_assembly:
     output: os.path.join(RESULTS_DIR, "{sample}", "multiqc_report.html")
     input: 
-        fastp = rules.preprocess_reads_fastplong.output,
+        #fastp = rules.preprocess_reads_fastplong.output,
         quast = rules.quality_assembly.output
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_multiqc_assembly.log")
     message: "Running MultiQC"
     shell:
-        """(date && multiqc $(dirname {input.fastp}) $(dirname {input.quast}) --force --config scripts/multiqc_config.yaml -o $(dirname {output}) && date) &> {log}"""
+        """(date && multiqc $(dirname {input.quast}) --force --config scripts/multiqc_config.yaml -o $(dirname {output}) && date) &> {log}"""
+# """(date && multiqc $(dirname {input.fastp}) $(dirname {input.quast}) --force --config scripts/multiqc_config.yaml -o $(dirname {output}) && date) &> {log}"""
 
 rule phage_contig_info:
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv")

@@ -1,4 +1,3 @@
-name: phageterm
 channels:
  - conda-forge
  - bioconda

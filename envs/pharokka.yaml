@@ -1,11 +1,8 @@
-name: pharokka
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - pharokka=1.7.5
+  - pharokka=1.8.2
   - biopython=1.80
   - gsl=2.7.0
-  - dnaapler=1.0.1
-  - phold=0.2.0

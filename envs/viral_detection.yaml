@@ -1,4 +1,3 @@
-name: viral_detection
 channels:
  - conda-forge
  - bioconda

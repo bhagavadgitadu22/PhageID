@@ -1,11 +1,4 @@
-name: dereplication
 channels:
-  - defaults
-  - conda-forge
   - bioconda
 dependencies:
-  - gsl=2.7.0
   - fastani=1.34
-  - pip
-  - pip:
-      - lovis4u==0.0.11

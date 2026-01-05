@@ -10,9 +10,13 @@ READS_DIR = config["reads_dir"]
 RESULTS_DIR = config["results_dir"]
 
 # list of phages
+#PHAGES_LIST = [
+#    sample for sample in glob_wildcards(os.path.join(READS_DIR, "{sample}"))[0]
+#    if os.path.isdir(os.path.join(READS_DIR, sample))
+#]
 PHAGES_LIST = [
-    sample for sample in glob_wildcards(os.path.join(READS_DIR, "{sample}"))[0]
-    if os.path.isdir(os.path.join(READS_DIR, sample))
+    sample for sample in glob_wildcards(os.path.join(RESULTS_DIR, "{sample}"))[0]
+    if os.path.isfile(os.path.join(RESULTS_DIR, sample, "flye", "filtered_assembly.fasta"))
 ]
 
 ### Rules to include
@@ -42,9 +46,10 @@ rule pipeline_new_phage:
         assembly_report = rules.multiqc_assembly.output,
         pharokka_plot = rules.pharokka_plot.output,
         phold_plot = rules.phold_plot.output,
-        #genotate_plot = rules.genotate_phold_plot.output,
+        genotate_plot = rules.genotate_pharokka_plot.output,
         defenseFinder_report = rules.antiDefenseFinder.output, 
         phageterm_report = rules.phageterm.output,
+        phageterm_plot = rules.phage_term_plot.output,
         vibrant_report = rules.vibrant.output,
         genomad_report = rules.genomad.output,
         checkv_report = rules.checkv.output
@@ -59,5 +64,5 @@ rule pipeline_one_host:
     input:
 	    ani = rules.fast_ani.output.fastani,
 	    pharokka = rules.lovis4u_pharokka.output,
-	    #genotate = rules.lovis4u_genotate.output
+	    genotate = rules.lovis4u_genotate.output
     shell: """touch {output}"""
