@@ -42,7 +42,7 @@ rule genotate_pharokka_plot:
     input:
         metadata = rules.phage_contig_info.output,
         gff_genotate = rules.genotate_pharokka_gff.output,
-	    gff_pharokka = rules.pharokka_phage.output.gff
+        gff_pharokka = rules.pharokka_phage.output.gff
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_gff_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
