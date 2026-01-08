@@ -4,5 +4,6 @@ channels:
  - defaults
 dependencies:
  - diamond=2.0.4
+ - blast=2.17.0
  - checkv=1.0.3
  - vibrant=1.2.1

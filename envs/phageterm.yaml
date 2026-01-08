@@ -4,4 +4,5 @@ channels:
  - defaults
 dependencies:
  - python=3.9
+ - numpy<2.0
  - pip

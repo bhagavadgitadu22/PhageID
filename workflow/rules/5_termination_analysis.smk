@@ -17,9 +17,8 @@ rule phageterm_preparation:
 rule phageterm:
     output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf")
     input:
-#        reads = rules.concat_reads.output,
-        reads = os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq"),
-        virus = rules.filtered_assembly_flye.output,
+        reads = rules.preprocess_reads_porechop.output,
+        virus = rules.correct_phage_with_autoblast.output.corrected,
         phageterm = rules.phageterm_preparation.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log")
     conda: os.path.join(ENV_DIR, "phageterm.yaml")
@@ -35,9 +34,8 @@ rule minimap2_mapping:
         bam = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_mapping.bam"),
         index = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_mapping.bam.bai"),
     input:
-        assembly = rules.filtered_assembly_flye.output,
-#        reads = rules.concat_reads.output
-        reads = os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
+        assembly = rules.correct_phage_with_autoblast.output.corrected,
+        reads = rules.preprocess_reads_porechop.output
     conda: os.path.join(ENV_DIR, "phageterm_plot.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_minimap2_mapping.log")
@@ -57,24 +55,3 @@ rule bedgraphs_from_mapping:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_bedgraphs_from_mapping.log")
     shell:
         """(date && python scripts/plot_coverages_like_phageterm.py {input.bam} {output.coverage} {output.start} {output.end} && date) &> {log}"""
-
-rule install_lovis4u_linux:
-    output: os.path.join(RESULTS_DIR, "logs", "lovis4u_linux.touch")
-    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    shell:
-        """lovis4u --linux && lovis4u --get-hmms && touch {output}"""
-
-rule phage_term_plot:
-    output:
-        os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "lovis4u.pdf"),
-    input:
-        linux = rules.install_lovis4u_linux.output,
-        gbk = rules.pharokka_phage.output.gbk,
-        coverage = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_coverage.bedgraph"),
-        start = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_start.bedgraph"),
-        end = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_end.bedgraph"),
-    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm_plot.log")
-    shell:
-        """(date && lovis4u -gb {input.gbk} --set-category-colour -o $(dirname {output}) \
-        -scc -gc -gc_skew -bg {input.coverage} {input.start} {input.end} -bgl "coverage" "start_reads" "end_reads" && date) &> {log}"""

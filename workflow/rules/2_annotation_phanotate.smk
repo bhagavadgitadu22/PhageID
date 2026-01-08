@@ -25,7 +25,7 @@ rule pharokka_phage:
 	    gff = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
 	    faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "phanotate.faa")
     input: 
-        virus = rules.filtered_assembly_flye.output,
+        virus = rules.correct_phage_with_autoblast.output.corrected,
         #db = rules.db_pharokka.output
         db = "/work/river/Databases/pharokka_db"
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
@@ -37,7 +37,7 @@ rule pharokka_phage:
 rule pharokka_plot:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots", "{sample}_annotated_by_pharokka.png")
     input: 
-        virus = rules.filtered_assembly_flye.output,
+        virus = rules.correct_phage_with_autoblast.output.corrected,
         pharokka_gbk = rules.pharokka_phage.output.gbk
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")

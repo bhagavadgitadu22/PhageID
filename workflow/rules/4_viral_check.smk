@@ -10,7 +10,7 @@ rule db_vibrant:
 rule vibrant:
     output: os.path.join(RESULTS_DIR, "{sample}", "vibrant", "VIBRANT_filtered_assembly", "VIBRANT_results_filtered_assembly", "VIBRANT_summary_results_filtered_assembly.tsv")
     input: 
-        assembly = rules.filtered_assembly_flye.output,
+        assembly = rules.correct_phage_with_autoblast.output.corrected,
         #db = rules.db_vibrant.output,
         db = "/work/river/Databases/Vibrant/databases"
     conda: os.path.join(ENV_DIR, "viral_detection.yaml")
@@ -35,7 +35,7 @@ rule db_genomad:
 rule genomad:
     output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "filtered_assembly_virus.fna")
     input: 
-        assembly = rules.filtered_assembly_flye.output,
+        assembly = rules.correct_phage_with_autoblast.output.corrected,
         db = rules.db_genomad.output,
     conda: os.path.join(ENV_DIR, "viral_taxonomy.yaml")
     threads: 4
@@ -63,11 +63,10 @@ rule checkv:
         checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"),
     input: 
         db = rules.db_checkv.output,
-        assembly = rules.filtered_assembly_flye.output
+        assembly = rules.correct_phage_with_autoblast.output.corrected
     conda: os.path.join(ENV_DIR, "viral_detection.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_checkv.log")
     message: "Running the first CheckV per assembly"
     shell:
         """(date && checkv end_to_end -t {threads} -d $(dirname $(dirname {input.db})) {input.assembly} $(dirname {output.checkv_quality}) && date) &> {log}"""
-

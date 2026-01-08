@@ -1,7 +1,7 @@
 # DefenseFinder
-rule defenseFinder_update:
-    output: os.path.join(RESULTS_DIR, "logs", "defensefinder_update.txt")
-    log: os.path.join(RESULTS_DIR, "logs", "defensefinder_update.log")
+rule defenseFinder_lastversion:
+    output: os.path.join(RESULTS_DIR, "logs", "defensefinder_lastversion.txt")
+    log: os.path.join(RESULTS_DIR, "logs", "defensefinder_lastversion.log")
     conda: os.path.join(ENV_DIR, "defensefinder.yaml")
     shell:
         """(date && defense-finder update && date) > {output}"""
@@ -10,7 +10,7 @@ rule antiDefenseFinder:
     output: os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_systems.tsv")
     input: 
         pharokka = rules.pharokka_phage.output.faa,
-        update = rules.defenseFinder_update.output
+        defenseFinder_lastversion = rules.defenseFinder_lastversion.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_defenseFinder.log")
     conda: os.path.join(ENV_DIR, "defensefinder.yaml")
     threads: 4    

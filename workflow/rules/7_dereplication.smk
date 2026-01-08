@@ -1,70 +1,98 @@
-# Copy all fasta and gff from phages of a host in a common directory
-rule copy_files_genus:
-    output: 
-        fasta = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "flye_assemblies")),
-        gff_pharokka = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "pharokka_annotations")),
-        gff_genotate = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "genotate_annotations")),
-        pharokka_plot = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "pharokka_plots")),
-        genotate_plot = directory(os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "genotate_plots")),
-    input: 
-        # Match all directories starting with genus
-        lambda wildcards: sorted(
-            [os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly.fasta") 
-            for d in os.listdir(RESULTS_DIR) 
-            if d.startswith(wildcards.genus + "_") 
-            and os.path.exists(os.path.join(RESULTS_DIR, d, "flye", "filtered_assembly.fasta"))]
-        )
-    log: os.path.join(RESULTS_DIR, "logs", "{genus}_copy_files.log")
+# Dereplication of the viruses
+rule combine_all_viruses:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses.fna")
+    input: expand(os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected.fasta"), sample = PHAGES_LIST)
+    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "combine_all_viruses.log")
+    message: "Combining all viruses from all samples"
     shell:
-        """(date && mkdir -p $(dirname {output.fasta} | xargs dirname) && mkdir -p $(dirname {output.fasta}) &&
-            mkdir -p {output.fasta} && mkdir -p {output.gff_pharokka} && mkdir -p {output.gff_genotate} && 
-            mkdir -p {output.pharokka_plot} && mkdir -p {output.genotate_plot}
-            for f in {input}; do 
-                name=$(dirname $f | xargs dirname | xargs basename);
-                ln -s $f {output.fasta}/${{name}}.fasta;
-                
-                gff_pharokka=$(echo $f | sed 's/flye\/filtered_assembly.fasta/pharokka\/pharokka.gff/');
-                gff_genotate=$(echo $f | sed 's/flye\/filtered_assembly.fasta/genotate\/genotate_annotation\/genotate_pharokka.gff/');
-                plot_pharokka=$(echo $f | sed "s/flye\/filtered_assembly.fasta/pharokka\/plots\/${{name}}_annotated_by_pharokka.png/");
-                plot_genotate=$(echo $f | sed "s/flye\/filtered_assembly.fasta/genotate\/genotate_annotation\/${{name}}_annotated_by_genotate_pharokka.png/");
-                echo $plot_pharokka
-                
-                ln -s $gff_pharokka {output.gff_pharokka}/pharokka_${{name}}.gff;
-                ln -s $gff_genotate {output.gff_genotate}/genotate_${{name}}.gff;
-                cp $plot_pharokka {output.pharokka_plot}/${{name}}_annotated_by_pharokka.png;
-                cp $plot_genotate {output.genotate_plot}/${{name}}_annotated_by_genotate.png;
-            done && date) &> {log}"""
+        """
+        (date && mkdir -p $(dirname {output}) &&
+        cat {input} > {output} && date) &> {log}
+        """
 
-# Comparison of phages' sequences relative to this host
-rule fast_ani:
-    output: 
-        list = os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "list_sequences.txt"),
-        fastani = os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "fastani.out")
-    input: rules.copy_files_genus.output.fasta
-    conda: os.path.join(ENV_DIR, "dereplication.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{genus}_fastani.log")
+rule blast_before_dereplication:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "blastn_all_viruses.tsv")
+    input: rules.combine_all_viruses.output
+    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    threads: 8
+    log: os.path.join(RESULTS_DIR, "logs", "blastn_all_viruses.log")
+    message: "BLAST all-vs-all of the viruses"
     shell:
-        """(date && find {input} -name "*.fasta" > {output.list} &&
-        fastANI --rl {output.list} --ql {output.list} --matrix -o {output.fastani} && date) &> {log}"""
+        """
+        (date && blastn -num_threads {threads} -query {input} -subject {input} -outfmt '6 std qlen slen' -max_target_seqs 10000 -out {output} &&
+        date) &> {log}
+        """
 
-# Comparison of phages' annotations relative to this host
+rule ani_for_dereplication:
+    output: 
+        ani_results = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "ani_all_viruses.tsv"),
+        clustering_results = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "clusters_all_viruses.tsv"),
+    input:
+        blast_results = rules.blast_before_dereplication.output, 
+        fna_viruses = rules.combine_all_viruses.output
+    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "ani_all_viruses.log")
+    message: "ANI for dereplication of the viral dataset"
+    shell:
+        """
+        (date && python scripts/ani_calc.py -i {input.blast_results} -o {output.ani_results} &&
+        python scripts/ani_clust.py --fna {input.fna_viruses} --ani {output.ani_results} --out {output.clustering_results} --min_ani 95 --min_tcov 85 --min_qcov 0 && date) &> {log}
+        """
+
+rule viruses_dereplicated:
+    output:
+        list_viruses_derep = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses_dereplicated.txt"),
+        fna_viruses_derep = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses_dereplicated.fna"),
+    input:
+        fna_viruses = rules.combine_all_viruses.output,
+        clustering_results = rules.ani_for_dereplication.output.clustering_results,
+    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "dereplication_all_viruses.log")
+    message: "Dereplication of the viral dataset"
+    shell:
+        """
+        (date && cut -f 1 {input.clustering_results} > {output.list_viruses_derep} &&
+        seqtk subseq {input.fna_viruses} {output.list_viruses_derep} > {output.fna_viruses_derep} && date) &> {log}
+        """
+
+# Comparison of phages' annotations with lovis4u
+rule install_lovis4u_linux:
+    output: os.path.join(RESULTS_DIR, "logs", "lovis4u_linux.touch")
+    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
+    shell:
+        """lovis4u --linux && lovis4u --get-hmms && touch {output}"""
+
 rule lovis4u_pharokka:
-    output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "lovis4u_pharokka", "lovis4u.pdf")
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_pharokka", "lovis4u.pdf")
     input: 
         linux = rules.install_lovis4u_linux.output,
-        gff = rules.copy_files_genus.output.gff_pharokka
+        gff = expand(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"), sample = PHAGES_LIST)
     conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{genus}_lovis4u_pharokka.log")
+    log: os.path.join(RESULTS_DIR, "logs", "lovis4u_pharokka.log")
     shell:
-        """(date && lovis4u -gff {input.gff} --reorient_loci --use-filename-as-id --homology-links --set-category-colour --run-hmmscan -o $(dirname {output}) && date) &> {log}"""
+        r"""(date && 
+        mkdir -p $(dirname {output})/gff_input && 
+        for gff in {input.gff}; do 
+            sample=$(basename $(dirname $(dirname $gff))); 
+            ln -sf $(realpath $gff) $(dirname {output})/gff_input/${{sample}}_pharokka.gff; 
+        done && 
+        lovis4u -gff $(dirname {output})/gff_input --reorient_loci --use-filename-as-id --homology-links --run-hmmscan -o $(dirname {output}) && 
+        date) &> {log}"""
 
 rule lovis4u_genotate:
-    output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "lovis4u_genotate", "lovis4u.pdf")
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_genotate", "lovis4u.pdf")
     input:
         linux = rules.install_lovis4u_linux.output,
-        gff = rules.copy_files_genus.output.gff_genotate
+        gff = expand(os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "genotate_pharokka.gff"), sample = PHAGES_LIST)
     conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{genus}_lovis4u_genotate.log")
+    log: os.path.join(RESULTS_DIR, "logs", "lovis4u_genotate.log")
     shell:
-        """(date && lovis4u -gff {input.gff} --reorient_loci --use-filename-as-id --homology-links --set-category-colour --run-hmmscan -o $(dirname {output}) && date) &> {log}"""
-
+        r"""(date && 
+        mkdir -p $(dirname {output})/gff_input && 
+        for gff in {input.gff}; do 
+            sample=$(basename $(dirname $(dirname $(dirname $gff)))); 
+            ln -sf $(realpath $gff) $(dirname {output})/gff_input/${{sample}}_genotate_pharokka.gff; 
+        done && 
+        lovis4u -gff $(dirname {output})/gff_input --reorient_loci --use-filename-as-id --homology-links --run-hmmscan -o $(dirname {output}) && 
+        date) &> {log}"""

@@ -1,7 +1,7 @@
 # Alternative annotation with genotate
 rule genotate_calling:
     output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate.faa")
-    input: rules.filtered_assembly_flye.output
+    input: rules.correct_phage_with_autoblast.output.corrected
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_calling.log")
     conda: os.path.join(ENV_DIR, "genotate.yaml")
     threads: 4
@@ -32,7 +32,7 @@ rule genotate_pharokka_gff:
     input: 
         metadata = rules.phage_contig_info.output,
         genes = rules.genotate_pharokka.output,
-        fasta = rules.filtered_assembly_flye.output
+        fasta = rules.correct_phage_with_autoblast.output.corrected
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_gff_output.log")
     shell:
         """(date && python scripts/reformat_pharokka_genotate.py {wildcards.sample} $(tail -n +2 {input.metadata} | cut -f 3) {input.genes} {input.fasta} {output} && date) &> {log}"""

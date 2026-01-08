@@ -10,14 +10,9 @@ READS_DIR = config["reads_dir"]
 RESULTS_DIR = config["results_dir"]
 
 # list of phages
-#PHAGES_LIST = [
-#    sample for sample in glob_wildcards(os.path.join(READS_DIR, "{sample}"))[0]
-#    if os.path.isdir(os.path.join(READS_DIR, sample))
-#]
-PHAGES_LIST = [
-    sample for sample in glob_wildcards(os.path.join(RESULTS_DIR, "{sample}"))[0]
-    if os.path.isfile(os.path.join(RESULTS_DIR, sample, "flye", "filtered_assembly.fasta"))
-]
+# Get only immediate subdirectories (maxdepth=1)
+PHAGES_LIST = [d for d in os.listdir(READS_DIR) 
+               if os.path.isdir(os.path.join(READS_DIR, d))]
 
 ### Rules to include
 # Function to recursively include all .smk files
@@ -33,36 +28,32 @@ include_smk_files('rules/')
 
 ### Global rules
 # Assembly rules
-rule assembly_all_phages:
-    input: expand(rules.assembly_reads_flye.output.assembly, sample = PHAGES_LIST)
-
-rule filtered_assembly_all_phages:
-    input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
+rule corrected_assembly_all_phages:
+    input: expand(rules.quality_assembly.output, sample = PHAGES_LIST)
 
 # One rule to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
     input: 
-        assembly_report = rules.multiqc_assembly.output,
+        assembly_report = rules.quality_assembly.output,
         pharokka_plot = rules.pharokka_plot.output,
         phold_plot = rules.phold_plot.output,
         genotate_plot = rules.genotate_pharokka_plot.output,
         defenseFinder_report = rules.antiDefenseFinder.output, 
         phageterm_report = rules.phageterm.output,
-        phageterm_plot = rules.phage_term_plot.output,
         vibrant_report = rules.vibrant.output,
         genomad_report = rules.genomad.output,
         checkv_report = rules.checkv.output
     shell: """touch {output}"""
-    
+
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
 
 # Rule for a whole host
-rule pipeline_one_host:
-    output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "done.touch")
+rule pipeline_comparison_phages:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
     input:
-	    ani = rules.fast_ani.output.fastani,
+	    ani = rules.viruses_dereplicated.output.fna_viruses_derep,
 	    pharokka = rules.lovis4u_pharokka.output,
 	    genotate = rules.lovis4u_genotate.output
     shell: """touch {output}"""
