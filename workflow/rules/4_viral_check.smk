@@ -1,25 +1,4 @@
-# VIBRANT and geNomad
-rule db_vibrant:
-    output: os.path.join(RESULTS_DIR, "logs", "vibrant_db_downloaded.txt")
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs/vibrant_db.log")
-    message: "Downloading the VIBRANT database"
-    shell: """(date && download-db.sh && echo "Database downloaded" > {output} && date) &> {log}"""
-
-rule vibrant:
-    output: os.path.join(RESULTS_DIR, "{sample}", "vibrant", "VIBRANT_filtered_assembly", "VIBRANT_results_filtered_assembly", "VIBRANT_summary_results_filtered_assembly.tsv")
-    input: 
-        assembly = rules.correct_phage_with_autoblast.output.corrected,
-        #db = rules.db_vibrant.output,
-        db = "/work/river/Databases/Vibrant/databases"
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_vibrant.log")
-    message: "Running VIBRANT"
-    shell:
-        """(date && VIBRANT_run.py -t {threads} -d {input.db} -i {input.assembly} -folder $(dirname $(dirname $(dirname {output}))) && date) &> {log}"""
-
+# geNomad
 rule db_genomad:
     output: os.path.join("/work/river/Databases", "genomad_db", "genomad_marker_metadata.tsv")
     log: os.path.join(RESULTS_DIR, "logs", "genomad_db.log")
@@ -33,9 +12,9 @@ rule db_genomad:
         """
 
 rule genomad:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "filtered_assembly_virus.fna")
+    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "autoblast_corrected_breaking_terminal_repeats_summary", "autoblast_corrected_breaking_terminal_repeats_virus.fna")
     input: 
-        assembly = rules.correct_phage_with_autoblast.output.corrected,
+        assembly = rules.break_terminal_repeats_with_autoblast.output.corrected,
         db = rules.db_genomad.output,
     conda: os.path.join(ENV_DIR, "viral_taxonomy.yaml")
     threads: 4
@@ -63,7 +42,7 @@ rule checkv:
         checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"),
     input: 
         db = rules.db_checkv.output,
-        assembly = rules.correct_phage_with_autoblast.output.corrected
+        assembly = rules.break_terminal_repeats_with_autoblast.output.corrected
     conda: os.path.join(ENV_DIR, "viral_detection.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_checkv.log")

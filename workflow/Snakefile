@@ -41,7 +41,6 @@ rule pipeline_new_phage:
         genotate_plot = rules.genotate_pharokka_plot.output,
         defenseFinder_report = rules.antiDefenseFinder.output, 
         phageterm_report = rules.phageterm.output,
-        vibrant_report = rules.vibrant.output,
         genomad_report = rules.genomad.output,
         checkv_report = rules.checkv.output
     shell: """touch {output}"""

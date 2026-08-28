@@ -1,7 +1,7 @@
 # Dereplication of the viruses
 rule combine_all_viruses:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses.fna")
-    input: expand(os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected.fasta"), sample = PHAGES_LIST)
+    input: expand(os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected_breaking_terminal_repeats.fasta"), sample = PHAGES_LIST)
     conda: os.path.join(ENV_DIR, "viral_detection.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "combine_all_viruses.log")
     message: "Combining all viruses from all samples"

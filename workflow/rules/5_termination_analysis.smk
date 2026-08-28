@@ -18,7 +18,7 @@ rule phageterm:
     output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf")
     input:
         reads = rules.preprocess_reads_porechop.output,
-        virus = rules.correct_phage_with_autoblast.output.corrected,
+        virus = rules.break_terminal_repeats_with_autoblast.output.corrected,
         phageterm = rules.phageterm_preparation.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log")
     conda: os.path.join(ENV_DIR, "phageterm.yaml")
@@ -34,7 +34,7 @@ rule minimap2_mapping:
         bam = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_mapping.bam"),
         index = os.path.join(RESULTS_DIR, "{sample}", "phageterm_plot", "{sample}_mapping.bam.bai"),
     input:
-        assembly = rules.correct_phage_with_autoblast.output.corrected,
+        assembly = rules.break_terminal_repeats_with_autoblast.output.corrected,
         reads = rules.preprocess_reads_porechop.output
     conda: os.path.join(ENV_DIR, "phageterm_plot.yaml")
     threads: 4
