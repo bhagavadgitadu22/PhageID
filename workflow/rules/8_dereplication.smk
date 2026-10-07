@@ -74,3 +74,48 @@ rule lovis4u_genotate:
     shell:
         """(date && lovis4u -gff {input.gff} --reorient_loci --use-filename-as-id --homology-links --set-category-colour --run-hmmscan -o $(dirname {output}) && date) &> {log}"""
 
+# theBIGbam
+rule thebigbam_mapping:
+    input:
+        assembly = choose_input_file,
+        read1 = os.path.join(RESULTS_DIR, "cutadapt", "{assembly}_R1_cutadapt.fastq.gz"),
+        read2 = os.path.join(RESULTS_DIR, "cutadapt", "{assembly}_R2_cutadapt.fastq.gz")
+    output: 
+        bam = os.path.join(RESULTS_DIR, "{kingdom}", "minimap2", "thebigbam", "{assembly}.bam"),
+        bai = os.path.join(RESULTS_DIR, "{kingdom}", "minimap2", "thebigbam", "{assembly}.bam.bai")
+    params:
+        reference_bases_dealt_at_once = "16G",
+        min_read_identity = config['coverm']['min_read_identity'],
+        min_read_coverage = config['coverm']['min_read_coverage'],
+        circular = lambda wildcards: "--circular" if "viruses" in wildcards.kingdom else ""
+    conda: os.path.join(ENV_DIR, "thebigbam.yaml")
+    threads: config['minimap2']['threads']
+    log: os.path.join(RESULTS_DIR, "logs", "{assembly}_mapping_for_coverage_{kingdom}.log")
+    message: "Running minimap2 to calculate coverage"
+    shell:
+        """(date &&
+        thebigbam mapping-per-sample -t {threads} \
+            -r1 {input.read1:q} -r2 {input.read2:q} -a {input.assembly:q} \
+            --min-read-percent-identity {params.min_read_identity} \
+            --min-read-aligned-percent {params.min_read_coverage} \
+            {params.circular} -o {output.bam:q} &&
+        date) &> {log}"""
+
+rule thebigbam_calculate:
+    input:
+        annotation = lambda wildcards: rules.combined_viral_annotations.output if "viruses" in wildcards.kingdom else rules.combine_mag_annotations.output,
+        bam = expand(os.path.join(RESULTS_DIR, "{{kingdom}}", "minimap2", "thebigbam", "{assembly}.bam"), assembly=SAMPLES),
+        bai = expand(os.path.join(RESULTS_DIR, "{{kingdom}}", "minimap2", "thebigbam", "{assembly}.bam.bai"), assembly=SAMPLES)
+    output:
+        db = os.path.join(RESULTS_DIR, "{kingdom}", "thebigbam", "thebigbam_{kingdom}.db")
+    params:
+        bam_dir = os.path.join(RESULTS_DIR, "{kingdom}", "minimap2", "thebigbam"),
+        view = lambda wildcards: "contig" if "viruses" in wildcards.kingdom else "mag",
+        min_aligned_fraction = lambda wildcards: "" if "viruses" in wildcards.kingdom else "--min_aligned_fraction 10"
+    conda: os.path.join(ENV_DIR, "thebigbam.yaml")
+    threads: config['thebigbam_calculate']['threads']
+    log: os.path.join(RESULTS_DIR, "logs", "thebigbam_calculate_for_{kingdom}.log")
+    shell:
+        """(date &&
+        thebigbam calculate -t {threads} -b {params.bam_dir:q} -g {input.annotation:q} -o {output.db:q} --time --blast {params.min_aligned_fraction} --view {params.view} &&
+        date) &> {log}"""

@@ -1,8 +1,8 @@
-name: preprocessing
+name: thebigbam
 channels:
  - conda-forge
  - bioconda
  - defaults
 dependencies:
- - porechop=0.2.4
- - seqtk=1.5
+ - thebigbam=0.7.0
+ 

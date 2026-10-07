@@ -1,7 +1,7 @@
-name: viral_taxonomy
+name: flye
 channels:
  - conda-forge
  - bioconda
  - defaults
 dependencies:
- - genomad=1.9.0
+ - flye=2.9.6

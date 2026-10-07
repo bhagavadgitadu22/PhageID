@@ -6,14 +6,21 @@ import pandas as pd
 configfile: os.getcwd()+"/../config/config.yaml"
 
 ENV_DIR = os.getcwd()+"/../envs"
-READS_DIR = config["reads_dir"]
+SAMPLES_FILE = config["samples_file"]
 RESULTS_DIR = config["results_dir"]
 
 # list of phages
-PHAGES_LIST = [
-    sample for sample in glob_wildcards(os.path.join(READS_DIR, "{sample}"))[0]
-    if os.path.isdir(os.path.join(READS_DIR, sample))
-]
+with open(SAMPLES_FILE) as f:
+    READ_FILES = {}
+    HOSTS_LIST = {}
+
+    for line in f:
+        if line.strip():
+            sample, r1, host = line.rstrip("\n").split("\t")[:3]
+            READ_FILES[sample] = r1
+            HOSTS_LIST[sample] = host
+
+PHAGES_LIST = list(READ_FILES.keys())
 
 ### Rules to include
 # Function to recursively include all .smk files
@@ -42,7 +49,7 @@ rule pipeline_new_phage:
         assembly_report = rules.multiqc_assembly.output,
         pharokka_plot = rules.pharokka_plot.output,
         phold_plot = rules.phold_plot.output,
-        #genotate_plot = rules.genotate_phold_plot.output,
+        genotate_plot = rules.genotate_phold_plot.output,
         defenseFinder_report = rules.antiDefenseFinder.output, 
         phageterm_report = rules.phageterm.output,
         vibrant_report = rules.vibrant.output,
@@ -58,6 +65,5 @@ rule pipeline_one_host:
     output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "done.touch")
     input:
 	    ani = rules.fast_ani.output.fastani,
-	    pharokka = rules.lovis4u_pharokka.output,
-	    #genotate = rules.lovis4u_genotate.output
+	    pharokka = rules.lovis4u_pharokka.output
     shell: """touch {output}"""

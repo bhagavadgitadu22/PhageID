@@ -1,53 +1,8 @@
-# VIBRANT and geNomad
-rule db_vibrant:
-    output: os.path.join(RESULTS_DIR, "logs", "vibrant_db_downloaded.txt")
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs/vibrant_db.log")
-    message: "Downloading the VIBRANT database"
-    shell: """(date && download-db.sh && echo "Database downloaded" > {output} && date) &> {log}"""
-
-rule vibrant:
-    output: os.path.join(RESULTS_DIR, "{sample}", "vibrant", "VIBRANT_filtered_assembly", "VIBRANT_results_filtered_assembly", "VIBRANT_summary_results_filtered_assembly.tsv")
-    input: 
-        assembly = rules.filtered_assembly_flye.output,
-        #db = rules.db_vibrant.output,
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_vibrant.log")
-    message: "Running VIBRANT"
-    shell:
-        """(date && VIBRANT_run.py -t {threads} -i {input.assembly} -folder $(dirname $(dirname $(dirname {output}))) && date) &> {log}"""
-
-rule db_genomad:
-    output: os.path.join(RESULTS_DIR, "dbs", "genomad_db", "genomad_marker_metadata.tsv")
-    log: os.path.join(RESULTS_DIR, "logs", "genomad_db.log")
-    conda: os.path.join(ENV_DIR, "viral_taxonomy.yaml")
-    message: "Downloading the geNomad database"
-    shell:
-        """
-        (date && cd $(dirname $(dirname {output})) &&
-        wget -nc https://zenodo.org/records/10594875/files/genomad_db_v1.7.tar.gz && 
-        tar --skip-old-files -zxvf genomad_db_v1.7.tar.gz && date) &> {log}
-        """
-
-rule genomad:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "filtered_assembly_virus.fna")
-    input: 
-        assembly = rules.filtered_assembly_flye.output,
-        db = os.path.join(RESULTS_DIR, "dbs", "genomad_db", "genomad_marker_metadata.tsv"),
-    conda: os.path.join(ENV_DIR, "viral_taxonomy.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad.log")
-    message: "Running geNomad"
-    shell:
-        "(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition metagenome --max-fdr 0.05 {input.assembly} $(dirname $(dirname {output})) $(dirname {input.db}) && date) &> {log}"
-
 # CheckV to assess completeness
 rule db_checkv:
     output: os.path.join(RESULTS_DIR, "dbs", "checkv-db-v1.5", "genome_db", "checkv_reps.dmnd")
     log: os.path.join(RESULTS_DIR, "logs", "checkv_db.log")
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    conda: os.path.join(ENV_DIR, "checkv.yaml")
     message: "Downloading the CheckV database"
     shell:
         """
@@ -63,7 +18,7 @@ rule checkv:
     input: 
         db = rules.db_checkv.output,
         assembly = rules.filtered_assembly_flye.output
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    conda: os.path.join(ENV_DIR, "checkv.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_checkv.log")
     message: "Running the first CheckV per assembly"
