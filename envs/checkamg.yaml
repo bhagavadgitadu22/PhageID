@@ -1,0 +1,12 @@
+name: checkamg
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - git
+  - cxx-compiler
+  - libgcc-ng
+  - libstdcxx-ng

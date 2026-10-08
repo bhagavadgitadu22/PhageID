@@ -7,7 +7,9 @@ rule defenseFinder_update:
         """(date && defense-finder update && date) > {output}"""
 
 rule antiDefenseFinder:
-    output: os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_systems.tsv")
+    output: 
+        systems=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_systems.tsv"),
+        genes=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_genes.tsv")
     input: 
         pharokka = rules.pharokka_phage.output.faa,
         update = rules.defenseFinder_update.output
@@ -16,17 +18,16 @@ rule antiDefenseFinder:
     threads: 4    
     shell:
         """(date && 
-        defense-finder run -w {threads} --preserve-raw --antidefensefinder -o $(dirname {output}) {input.pharokka} &&
+        defense-finder run -w {threads} --preserve-raw --antidefensefinder -o $(dirname {output.genes}) {input.pharokka} &&
         date) &> {log}"""
 
 # checkAMG on viruses for metabolic genes
 rule checkamg_install:
-    output:
-        executable=os.path.join(RESULTS_DIR, "software", "checkamg", "venv", "bin", "checkamg")
+    output: os.path.join(RESULTS_DIR, "software", "checkamg", "venv", "bin", "checkamg")
     params:
         prefix=os.path.join(RESULTS_DIR, "software", "checkamg"),
-        repository=config["checkamg"]["repository"],
-        revision=config["checkamg"]["revision"]
+        repository="https://github.com/AnantharamanLab/CheckAMG.git",
+        revision="d29aaef"
     conda: os.path.join(ENV_DIR, "checkamg.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "checkamg_install.log")
     message: "Installing pinned CheckAMG"
@@ -52,19 +53,19 @@ rule checkamg_install:
         {params.prefix:q}/venv/bin/uv pip install --python {params.prefix:q}/venv/bin/python faiss-cpu &&
         {params.prefix:q}/venv/bin/uv pip install --python {params.prefix:q}/venv/bin/python {params.prefix:q}/source &&
         {params.prefix:q}/venv/bin/python -c "import sqlite3; import torch_scatter" &&
-        {output.executable:q} --version &&
+        {output} --version &&
         date) &> {log:q}
         """
 
 rule checkamg:
     input:
-        pharokka = rules.pharokka.output.faa_raw,
-        db = config["checkamg"]["database"],
-        executable = rules.checkamg_install.output.executable
-    output: os.path.join(RESULTS_DIR, "viruses", "protein_annotation", "checkamg", "results", "final_results.tsv")
-    log: os.path.join(RESULTS_DIR, "logs", "checkamg_viruses.log")
+        pharokka = rules.pharokka_phage.output.faa_raw,
+        db = "/work/river/Databases/checkAMG_db/checkamg_db/CheckAMG_annotate_db_v1.1_20260316/",
+        executable = rules.checkamg_install.output
+    output: os.path.join(RESULTS_DIR, "{sample}", "checkamg", "results", "final_results.tsv")
+    log: os.path.join(RESULTS_DIR, "logs", "checkamg_{sample}.log")
     conda: os.path.join(ENV_DIR, "checkamg.yaml")
-    threads: config['checkamg']['threads']    
+    threads: 4
     message: "Global checkAMG for viral contigs"
     shell:
         """(date && 
@@ -72,4 +73,3 @@ rule checkamg:
         export PATH="$(dirname {input.executable:q}):$PATH" &&
         {input.executable:q} annotate -t {threads} --input-type prot -p {input.pharokka:q} -d {input.db:q} -o $(dirname {output:q}) &&
         date) &> {log}"""
-

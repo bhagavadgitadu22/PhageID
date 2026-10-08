@@ -1,6 +1,4 @@
-import os, re
-import glob
-import pandas as pd
+import os
 
 ### Configuration
 configfile: os.getcwd()+"/../config/config.yaml"
@@ -22,6 +20,36 @@ with open(SAMPLES_FILE) as f:
 
 PHAGES_LIST = list(READ_FILES.keys())
 
+def active_viral_samples(wildcards):
+    import csv
+    report_directory = checkpoints.viral_sample_report.get().output.report
+    with open(os.path.join(report_directory, "samples.tsv"), newline="") as handle:
+        return [row["Sample"] for row in csv.DictReader(handle, delimiter="\t") if row["Status"] == "ready"]
+
+def active_sample_files(pattern):
+    return lambda wildcards: expand(pattern, sample=active_viral_samples(wildcards))
+
+def per_sample_pipeline_inputs(wildcards):
+    report_directory = checkpoints.viral_sample_report.get().output.report
+    if wildcards.sample not in PHAGES_LIST:
+        raise ValueError(f"Unknown sample: {wildcards.sample}")
+    if wildcards.sample not in active_viral_samples(wildcards):
+        return [report_directory]
+    outputs = [*rules.phage_contig_info.output, *rules.genomad.output,
+               *rules.phageterm.output, *rules.checkv.output,
+               *rules.pharokka_plot.output, *rules.genotate_pharokka_plot.output,
+               rules.antiDefenseFinder.output.systems,
+               *rules.combine_empathi_with_sublyme.output, *rules.checkamg.output]
+    return expand(outputs, sample=wildcards.sample)
+
+def comparison_pipeline_inputs(wildcards):
+    report_directory = checkpoints.viral_sample_report.get().output.report
+    if not active_viral_samples(wildcards):
+        return [report_directory]
+    return [report_directory, rules.ani_for_dereplication.output.ani_results,
+            *rules.viruses_dereplicated.output, *rules.lovis4u_pharokka.output,
+            *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output]
+
 ### Rules to include
 # Function to recursively include all .smk files
 def include_smk_files(directory):
@@ -37,29 +65,22 @@ include_smk_files('rules/')
 ### Global rules
 # Assembly rules
 rule corrected_assembly_all_phages:
-    input: expand(rules.quality_assembly.output, sample = PHAGES_LIST)
+    input: lambda wildcards: checkpoints.viral_sample_report.get().output.report
 
 # One rule to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
-    input: 
-        assembly_report = rules.quality_assembly.output,
-        pharokka_plot = rules.pharokka_plot.output,
-        phold_plot = rules.phold_plot.output,
-        genotate_plot = rules.genotate_pharokka_plot.output,
-        defenseFinder_report = rules.antiDefenseFinder.output, 
-        phageterm_report = rules.phageterm.output,
-        genomad_report = rules.genomad.output,
-        checkv_report = rules.checkv.output
+    input: per_sample_pipeline_inputs
     shell: """touch {output}"""
 
 rule pipeline_all_phages:
-    input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
+    default_target: True
+    input:
+        report=lambda wildcards: checkpoints.viral_sample_report.get().output.report,
+        samples=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
 
 # Rule for a whole host
 rule pipeline_comparison_phages:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
-    input:
-	    ani = rules.fast_ani.output.fastani,
-	    pharokka = rules.lovis4u_pharokka.output
+    input: comparison_pipeline_inputs
     shell: """touch {output}"""

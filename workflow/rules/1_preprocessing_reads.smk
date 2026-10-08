@@ -1,7 +1,7 @@
 # concatenate and unzipping source reads into a single fastq file for each sample
 rule concat_reads:
     output: os.path.join(RESULTS_DIR, "{sample}", "reads", "{sample}.fastq")
-    input: os.path.join(READS_DIR, "{sample}")
+    input: lambda wc: READ_FILES[wc.sample],
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_concat_reads.log")
     shell:
         """for f in {input}/*; do
@@ -26,9 +26,11 @@ rule preprocess_reads_porechop:
 # I cannot use in assembly or I would lose prophages though
 rule remove_bacterial_contamination:
     output: os.path.join(RESULTS_DIR, "{sample}", "reads", "cleaned.{sample}.fastq")
-    input: rules.preprocess_reads_porechop.output
-    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+    input: 
+        reads = rules.preprocess_reads_porechop.output,
+        ref = lambda wc: HOSTS_LIST[wc.sample],
+    conda: os.path.join(ENV_DIR, "thebigbam.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_remove_bacterial_contamination.log")
     shell:
-        """(date && minimap2 -t {threads} -ax map-ont {config[bacterial_genome]} {input} | samtools view -@ {threads} -b -F 4 - | samtools fastq - > {output} && date) &> {log}"""
+        """(date && minimap2 -t {threads} -ax map-ont {input.ref} {input.reads} | samtools view -@ {threads} -b -f 4 - | samtools fastq - > {output} && date) &> {log}"""

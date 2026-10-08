@@ -6,7 +6,7 @@ rule assembly_reads_flye:
         graph = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly_graph.gfa"),
         info = os.path.join(RESULTS_DIR, "{sample}", "flye", "assembly_info.txt")
     input: rules.preprocess_reads_porechop.output
-    conda: os.path.join(ENV_DIR, "assembly_flye.yaml")
+    conda: os.path.join(ENV_DIR, "flye.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_reads_flye.log")
     threads: 20
     shell:
@@ -14,10 +14,10 @@ rule assembly_reads_flye:
 
 # running geNomad to check for viral sequences and their taxonomy
 rule genomad:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "filtered_assembly_virus.fna")
+    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna")
     input: 
         assembly = rules.assembly_reads_flye.output.assembly,
-        db = config["genomad"]["database"],
+        db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
     conda: os.path.join(ENV_DIR, "genomad.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad.log")
@@ -25,62 +25,71 @@ rule genomad:
     shell:
         "(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.assembly} $(dirname $(dirname {output})) $(dirname {input.db}) && date) &> {log}"
 
-# keeping viral contigs longer than 10 kbp
+# keeping viral contigs longer than 2 kbp
 rule keep_long_viral_contigs:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "viral_above_10_kbp.fna")
+    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "viral_above_2_kbp.fna")
     input: rules.genomad.output
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_keep_long_viral_contigs.log")
     shell:
-        """(date && seqtk seq -L 10000 {input} > {output} && date) &> {log}"""
+        """(date && seqtk seq -L 2000 {input} > {output} && date) &> {log}"""
 
 # renaming contigs with sample name to avoid duplicates in downstream analyses
 rule rename_contigs:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_filtered_assembly", "filtered_assembly_summary", "viral_above_10_kbp_renamed.fna")
+    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "viral_above_2_kbp_renamed.fna")
     input: rules.keep_long_viral_contigs.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_rename_contigs.log")
     shell:
-        """(date && awk -v sample={wildcards.sample} '/^>/ {print ">" sample "_" substr($0, 2); next} {print}' {input} > {output} && date) &> {log}"""
+        """(date && awk -v sample={wildcards.sample} '/^>/ {{print ">" sample "_" substr($0, 2); next}} {{print}}' {input} > {output} && date) &> {log}"""
 
-# Autoblast to detect potential duplications of the phage (concatemers)
-rule break_concatemers_with_autoblast:
-    output: 
-        corrected = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected_breaking_concatemers.fasta"),
-        report = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_report_breaking_concatemers.csv")
+# autoblast to detect potential duplications of the phage (concatemers)
+rule fix_circular_viral_contigs_per_sample:
+    output:
+        corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
+        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
+        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_dtr_report.csv")
     input: rules.rename_contigs.output
+    params:
+        min_identity=95,
+        min_repeat=90,
+        min_coverage=90,
+        max_distance=20
     conda: os.path.join(ENV_DIR, "checkv.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_autoblast.log")
+    threads: 4
+    log: os.path.join(RESULTS_DIR, "logs", "fix_circular_viral_contigs_{sample}.log")
+    message: "Correcting likely viral concatemers and terminal repeats in {wildcards.sample}"
     shell:
-        r"""
-        (date && 
-        # Run BLAST against itself
-        blastn -query {input} -subject {input} -outfmt "6 qseqid sseqid pident length qstart qend qlen sstart send slen" -evalue 1e-10 > {input}.blast.tsv 2>> {log}
-        # Analyze results for duplications
-        python scripts/break_concatemers.py --blast {input}.blast.tsv --fasta {input} --out_report {output.report} --out_fasta {output.corrected} &&
+        """
+        (date &&
+        python ./scripts/correct_phage_contigs.py --threads {threads} --fasta {input} \
+            --min_identity {params.min_identity} --min_repeat {params.min_repeat} --min_coverage {params.min_coverage} --max_distance {params.max_distance} \
+            --out_fasta {output.corrected} --out_concatemer_report {output.concatemer_report} --out_dtr_report {output.dtr_report} &&
         date) &> {log}
         """
 
-rule break_terminal_repeats_with_autoblast:
-    output: 
-        corrected = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected_breaking_terminal_repeats.fasta"),
-        report = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_report_breaking_terminal_repeats.csv")
-    input: rules.break_concatemers_with_autoblast.output.corrected
-    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_autoblast.log")
-    shell:
-        r"""
-        (date && 
-        # Run BLAST against itself
-        blastn -query {input} -subject {input} -outfmt "6 qseqid sseqid pident length qstart qend qlen sstart send slen" -evalue 1e-10 > {input}.blast.tsv 2>> {log}
-        # Analyze results for duplications
-        python scripts/break_terminal_repeats.py --blast {input}.blast.tsv --fasta {input} --out_report {output.report} --out_fasta {output.corrected} &&
-        date) &> {log}
-        """
-
-# assessing characteristics of final viral contigs
+# One row per corrected viral contig, including Flye and correction metadata.
 rule phage_contig_info:
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv")
-    input: rules.break_terminal_repeats_with_autoblast.output.corrected
+    input:
+        fasta=rules.fix_circular_viral_contigs_per_sample.output.corrected,
+        flye=rules.assembly_reads_flye.output.info,
+        concatemer=rules.fix_circular_viral_contigs_per_sample.output.concatemer_report,
+        dtr=rules.fix_circular_viral_contigs_per_sample.output.dtr_report
+    params:
+        script=workflow.basedir + "/scripts/viral_contig_report.py"
+    conda: os.path.join(ENV_DIR, "pharokka.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_stats.log")
     shell:
-        """(date && ./scripts/contig_info.sh -m 1000 -t {input} > {output} && date) &> {log}"""
+        """python {params.script:q} sample --sample {wildcards.sample:q} --fasta {input.fasta:q} --flye-info {input.flye:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --output {output:q} > {log:q} 2>&1"""
+
+checkpoint viral_sample_report:
+    input: expand(os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"), sample=PHAGES_LIST)
+    output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
+    params:
+        script=workflow.basedir + "/scripts/viral_contig_report.py",
+        sample_args=lambda wildcards, input: [value for sample, report in zip(PHAGES_LIST, input)
+                                             for value in ("--sample-report", sample, str(report))]
+    conda: os.path.join(ENV_DIR, "pharokka.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "viral_sample_report.log")
+    shell:
+        """python {params.script:q} combine {params.sample_args:q} --output-dir {output.report:q} > {log:q} 2>&1"""

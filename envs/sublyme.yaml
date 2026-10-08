@@ -1,0 +1,10 @@
+name: sublyme
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11.5
+  - pip=23.2.1
+  - pip:
+      - sublyme==1.2.2

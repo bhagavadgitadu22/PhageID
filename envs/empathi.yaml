@@ -1,0 +1,10 @@
+name: empathi
+channels:
+ - conda-forge
+ - bioconda
+ - defaults
+dependencies:
+ - python=3.11.5
+ - pip=23.2.1
+ - git=2.42.0
+ - git-lfs=3.4.1

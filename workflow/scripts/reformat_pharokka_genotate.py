@@ -1,46 +1,64 @@
+#!/usr/bin/env python3
+"""Convert Genotate/Pharokka protein annotations to a multi-contig GFF3."""
+import argparse
 import csv
 import re
-import sys
+from pathlib import Path
+from urllib.parse import quote
+from Bio import SeqIO
 
-gffs = {}
-with open(sys.argv[3], newline='') as csvfile:
-    spamreader = csv.reader(csvfile, delimiter='\t', quotechar='|')
-    for row in spamreader:
-        name = row[0]
-        length = row[1]
-        phrog = row[2]
-        annot = row[3].replace("DNA, RNA and nucleotide metabolism", "DNA").replace("moron, auxiliary metabolic gene and host takeover", "moron")
-        category = row[4].replace("DNA, RNA and nucleotide metabolism", "DNA").replace("moron, auxiliary metabolic gene and host takeover", "moron")
+PATTERN = re.compile(r"(.*?)_CDS_\[(complement\()?(\d+)\.\.(\d+)(\))?\]$")
 
-        pattern = r"(.*?)_CDS_\[(complement\()?(\d+)\.\.(\d+)(\))?\]$"
-        match = re.match(pattern, name)
 
-        if match:
-            contig = match.group(1)
-            start = match.group(3)
-            end = match.group(4)
+def convert(genes, fasta, output):
+    records = list(SeqIO.parse(fasta, "fasta"))
+    lengths = {record.id: len(record.seq) for record in records}
+    if len(lengths) != len(records):
+        raise ValueError("Duplicate FASTA contig IDs")
+    features = {name: [] for name in lengths}
+    with open(genes, newline="") as handle:
+        for line, row in enumerate(csv.reader(handle, delimiter="\t"), 1):
+            if not row or row[0].startswith("#"):
+                continue
+            match = PATTERN.fullmatch(row[0])
+            if not match:
+                if line == 1 and row[0].lower() in {"name", "id", "protein", "protein_id", "gene", "gene_id"}:
+                    continue
+                raise ValueError(f"{genes}:{line}: unrecognized protein ID {row[0]!r}")
+            if len(row) < 5:
+                raise ValueError(f"{genes}:{line}: expected at least five columns")
+            contig, complement, start, end, closing = match.groups()
+            if bool(complement) != bool(closing):
+                raise ValueError(f"{genes}:{line}: malformed complement coordinates")
+            start, end = int(start), int(end)
+            if contig not in lengths or not 1 <= start <= end <= lengths[contig]:
+                raise ValueError(f"{genes}:{line}: unknown contig or invalid coordinates")
+            category = row[4].replace("DNA, RNA and nucleotide metabolism", "DNA").replace("moron, auxiliary metabolic gene and host takeover", "moron")
+            attributes = {"ID": row[0], "phrog": row[2], "function": category, "product": row[3]}
+            attrs = ";".join(f"{key}={quote(value, safe=':_-.')}" for key, value in attributes.items())
+            # Each Genotate prediction is a complete CDS; genomic reading frame
+            # belongs in plotting logic, not the GFF phase (bases to skip).
+            features[contig].append("\t".join([contig, "genotate_0.15", "CDS", str(start), str(end), ".", "-" if complement else "+", "0", attrs]))
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w") as handle:
+        handle.write("##gff-version 3\n")
+        for record in records:
+            handle.write(f"##sequence-region {record.id} 1 {len(record.seq)}\n")
+        for record in records:
+            for feature in features[record.id]:
+                handle.write(feature + "\n")
+        handle.write("##FASTA\n")
+        SeqIO.write(records, handle, "fasta")
 
-            strand = "-"
-            if match.group(2) is None:
-                strand = "+"
-            phased = str((int(start)+2)%3)
 
-            gff = [contig, "genotate_0.15", "CDS", start, end, ".", strand, phased, "ID="+contig+"_"+str(start)+"_"+str(end)+";phrog="+str(phrog)+";function="+category+";product="+category]
-            str_gff = '\t'.join(gff)
-            if contig not in gffs:
-                gffs[contig] = []
-            gffs[contig].append([str_gff])
-        else:
-            print(row)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--genes", required=True)
+    parser.add_argument("--fasta", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    convert(args.genes, args.fasta, args.output)
 
-for contig in gffs:
-    print(contig)
-    contig_renamed = contig.replace("/", "_")
-    with open(sys.argv[5], 'w', newline='') as gff_file:
-        writer = csv.writer(gff_file)
-        writer.writerow(["##gff-version 3"])
-        writer.writerow(["##sequence "+str(sys.argv[1])+" "+str(sys.argv[2])])
-        writer.writerows(gffs[contig])
-        writer.writerow(["##FASTA"])
-        with open(sys.argv[4], 'r') as source:
-            gff_file.write(source.read())
+
+if __name__ == "__main__":
+    main()

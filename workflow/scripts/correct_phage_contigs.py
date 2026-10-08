@@ -1,274 +1,407 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Correct likely viral concatemers and direct terminal repeats."""
+
 import argparse
+import copy
+import csv
 import os
+import shutil
 import subprocess
 import tempfile
-import shutil
-import csv
-from pathlib import Path
+from collections import Counter
 from multiprocessing import Pool
+from pathlib import Path
+
 from Bio import SeqIO
 
+CONCATEMER_FIELDS = (
+    "contig_id", "original_length", "num_hits", "unique_repeat_coverage_bp",
+    "unique_repeat_coverage_ratio", "forward_hits", "reverse_hits", "concatemer_detected",
+    "repeat_unit_size", "num_copies", "corrected_length", "status",
+)
+DTR_FIELDS = (
+    "contig_id", "original_length", "num_hits", "dtr_detected", "dtr_size",
+    "dtr_identity", "five_prime_coords", "three_prime_coords", "overlap",
+    "cut_position", "corrected_length", "status",
+)
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Correct phage contigs by detecting and removing concatemers and DTRs")
-    parser.add_argument('--fasta', type=str, required=True, help="Path to input FASTA file with multiple contigs")
-    parser.add_argument('--out_fasta', type=str, required=True, help="Path to output corrected FASTA file")
-    parser.add_argument('--out_concatemer_report', type=str, required=True, help="Path to output concatemer CSV report")
-    parser.add_argument('--out_dtr_report', type=str, required=True, help="Path to output DTR CSV report")
-    parser.add_argument('--threads', type=int, default=1, help="Number of threads for parallel processing (default: 1)")
-    parser.add_argument('--min_identity', type=float, default=95, help="Minimum percent identity for BLAST (default: 95)")
-    parser.add_argument('--min_repeat', type=float, default=90, help="Min repeat threshold for concatemers (default: 90)")
-    parser.add_argument('--min_coverage', type=float, default=90, help="Min coverage threshold for concatemers (default: 90)")
-    parser.add_argument('--max_distance', type=int, default=20, help="Max distance from ends for DTRs (default: 20)")
-    parser.add_argument('--script_dir', type=str, default=None, help="Directory containing break_*.py scripts (default: same as this script)")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--fasta", required=True, help="Input multi-contig FASTA")
+    parser.add_argument("--out_fasta", required=True, help="Corrected FASTA")
+    parser.add_argument("--out_concatemer_report", required=True, help="Concatemer CSV")
+    parser.add_argument("--out_dtr_report", required=True, help="DTR CSV")
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--min_identity", type=float, default=95)
+    parser.add_argument("--min_repeat", type=float, default=90)
+    parser.add_argument("--min_coverage", type=float, default=90)
+    parser.add_argument("--max_distance", type=int, default=20)
     return parser.parse_args()
 
-
 def run_blast(fasta_file, blast_output):
-    """Run BLAST self-alignment on a single contig FASTA file."""
-    # Use shell command with proper output redirection
-    cmd = (
-        f'blastn -query "{fasta_file}" -subject "{fasta_file}" '
-        f'-outfmt "6 qseqid sseqid pident length qstart qend qlen sstart send slen" '
-        f'> "{blast_output}"'
-    )
-    result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"BLAST failed: {result.stderr}")
+    """Run BLAST self-alignment on one contig FASTA."""
+    command = [
+        "blastn", "-query", str(fasta_file), "-subject", str(fasta_file),
+        "-outfmt", "6 qseqid sseqid pident length qstart qend qlen sstart send slen",
+    ]
+    with open(blast_output, "w") as output_handle:
+        subprocess.run(
+            command, check=True, stdout=output_handle,
+            stderr=subprocess.PIPE, text=True,
+        )
 
+def read_blast_hits(path):
+    """Read the fixed ten-column self-BLAST format once."""
+    hits = []
+    with open(path) as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) != 10:
+                raise ValueError(f"Expected 10 BLAST columns in {path}:{line_number}")
+            qseqid, sseqid, pident, length, qstart, qend, qlen, sstart, send, slen = fields
+            hits.append({
+                "qseqid": qseqid, "sseqid": sseqid, "pident": float(pident),
+                "length": int(length), "qstart": int(qstart), "qend": int(qend),
+                "qlen": int(qlen), "sstart": int(sstart), "send": int(send),
+                "slen": int(slen),
+            })
+    return hits
+
+def merged_query_coverage_bp(hits):
+    """Return unique bp covered by inclusive BLAST query intervals."""
+    intervals = sorted(
+        (min(hit["qstart"], hit["qend"]), max(hit["qstart"], hit["qend"]))
+        for hit in hits
+    )
+    if not intervals:
+        return 0
+    covered = 0
+    current_start, current_end = intervals[0]
+    for start, end in intervals[1:]:
+        if start <= current_end + 1:
+            current_end = max(current_end, end)
+        else:
+            covered += current_end - current_start + 1
+            current_start, current_end = start, end
+    return covered + current_end - current_start + 1
+
+def correct_concatemer(record, hits, min_identity, min_repeat, min_coverage):
+    """Infer a repeat period from self-alignment offsets and verify every copy."""
+    sequence_length = len(record.seq)
+    result = {
+        "contig_id": record.id, "original_length": sequence_length,
+        "num_hits": 0, "unique_repeat_coverage_bp": 0,
+        "unique_repeat_coverage_ratio": 0.0,
+        "forward_hits": 0, "reverse_hits": 0, "concatemer_detected": False,
+        "repeat_unit_size": 0, "num_copies": 0,
+        "corrected_length": sequence_length, "status": "no_repeats",
+    }
+    eligible = [
+        {**hit, "orientation": "forward" if hit["sstart"] < hit["send"] else "reverse"}
+        for hit in hits
+        if hit["qstart"] != hit["sstart"] and hit["pident"] >= min_identity
+    ]
+    if eligible:
+        largest = max(hit["length"] for hit in eligible)
+        eligible = [hit for hit in eligible if hit["length"] >= largest * min_repeat / 100.0]
+    if not eligible:
+        return record, result
+
+    forward = [hit for hit in eligible if hit["orientation"] == "forward"]
+    reverse = [hit for hit in eligible if hit["orientation"] == "reverse"]
+    unique_coverage_bp = merged_query_coverage_bp(eligible + [
+        {"qstart": hit["sstart"], "qend": hit["send"]} for hit in eligible
+    ])
+    coverage_ratio = unique_coverage_bp / sequence_length
+    result.update({
+        "num_hits": len(eligible), "unique_repeat_coverage_bp": unique_coverage_bp,
+        "unique_repeat_coverage_ratio": coverage_ratio, "forward_hits": len(forward),
+        "reverse_hits": len(reverse),
+    })
+    if coverage_ratio < min_coverage / 100.0:
+        result["status"] = "below_threshold"
+    elif forward:
+        result["status"] = "repeats_unclear"
+        sequence = str(record.seq).upper()
+        # A 1..200 vs 101..300 alignment supports a 100-bp period,
+        # even though the alignment itself is 200 bp long.
+        offsets = sorted({abs(hit["sstart"] - hit["qstart"]) for hit in forward
+                          if hit["qstart"] < hit["qend"]
+                          and hit["sstart"] - hit["qstart"] == hit["send"] - hit["qend"]})
+        for repeat_unit in offsets:
+            copies, remainder = divmod(sequence_length, repeat_unit)
+            # Be conservative: partial copies or indels need more evidence.
+            if copies < 2 or remainder:
+                continue
+            supporting_hits = [hit for hit in forward
+                               if abs(hit["sstart"] - hit["qstart"]) == repeat_unit
+                               and hit["sstart"] - hit["qstart"] == hit["send"] - hit["qend"]]
+            # Include both sides of each alignment; reciprocal hits are optional.
+            intervals = supporting_hits + [
+                {"qstart": hit["sstart"], "qend": hit["send"]} for hit in supporting_hits
+            ]
+            if merged_query_coverage_bp(intervals) / sequence_length < min_coverage / 100.0:
+                continue
+            unit = sequence[:repeat_unit]
+            if any(
+                sum(a == b and a in "ACGT" for a, b in zip(unit, sequence[start:start + repeat_unit]))
+                / repeat_unit < min_identity / 100.0
+                for start in range(repeat_unit, sequence_length, repeat_unit)
+            ):
+                continue
+            result.update({
+                "concatemer_detected": True, "repeat_unit_size": repeat_unit,
+                "num_copies": copies, "corrected_length": repeat_unit,
+                "status": "corrected",
+            })
+            record.seq = record.seq[:repeat_unit]
+            record.description = f"{record.description} | corrected from {copies}x concatemer"
+            break
+    elif reverse:
+        result["status"] = "inverted_repeats"
+    else:
+        result["status"] = "repeats_unclear"
+    return record, result
+
+def correct_dtr(record, hits, min_identity, max_distance):
+    """Remove the second copy of the longest qualifying direct terminal repeat."""
+    sequence_length = len(record.seq)
+    result = {
+        "contig_id": record.id, "original_length": sequence_length,
+        "num_hits": 0, "dtr_detected": False, "dtr_size": 0,
+        "dtr_identity": 0.0, "five_prime_coords": "",
+        "three_prime_coords": "", "overlap": 0,
+        "cut_position": sequence_length, "corrected_length": sequence_length,
+        "status": "no_hits",
+    }
+    eligible = [
+        hit for hit in hits
+        if hit["qstart"] != hit["sstart"]
+        and hit["pident"] >= min_identity
+        and hit["sstart"] < hit["send"]
+    ]
+    if not eligible:
+        return record, result
+    result["num_hits"] = len(eligible)
+    candidates = []
+    for hit in eligible:
+        near_five_prime = min(hit["qstart"], hit["sstart"]) <= max_distance
+        near_three_prime = max(hit["qend"], hit["send"]) >= sequence_length - max_distance
+        if not (near_five_prime and near_three_prime):
+            continue
+        if hit["qstart"] <= max_distance:
+            five_start, five_end = hit["qstart"], hit["qend"]
+            three_start, three_end = hit["sstart"], hit["send"]
+        else:
+            five_start, five_end = hit["sstart"], hit["send"]
+            three_start, three_end = hit["qstart"], hit["qend"]
+        candidates.append({
+            "length": hit["length"], "pident": hit["pident"],
+            "five_prime_start": five_start, "five_prime_end": five_end,
+            "three_prime_start": three_start, "three_prime_end": three_end,
+        })
+    if not candidates:
+        result["status"] = "no_terminal_hits"
+        return record, result
+
+    best = max(candidates, key=lambda hit: hit["length"])
+    cut_position = max(best["five_prime_end"], best["three_prime_start"] - 1)
+    overlap = max(0, best["five_prime_end"] - best["three_prime_start"] + 1)
+    result.update({
+        "dtr_detected": True, "dtr_size": best["length"],
+        "dtr_identity": best["pident"],
+        "five_prime_coords": f"{best['five_prime_start']}-{best['five_prime_end']}",
+        "three_prime_coords": f"{best['three_prime_start']}-{best['three_prime_end']}",
+        "overlap": overlap, "cut_position": cut_position,
+        "corrected_length": cut_position, "status": "corrected",
+    })
+    record.seq = record.seq[:cut_position]
+    record.description = (
+        f"{record.description} | DTR removed "
+        f"({best['length']} bp, {best['pident']:.1f}% id)"
+    )
+    return record, result
+
+def exception_text(error):
+    message = str(error)
+    if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+        stderr = error.stderr.decode() if isinstance(error.stderr, bytes) else error.stderr
+        message = f"{message}; stderr: {stderr.strip()}"
+    return message
+
+def staged_output(destination):
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", prefix=f".{destination.name}.", suffix=".tmp",
+        dir=destination.parent, delete=False,
+    )
+    handle.close()
+    return Path(handle.name)
+
+def publish_empty_outputs(args):
+    destinations = (
+        Path(args.out_fasta), Path(args.out_concatemer_report), Path(args.out_dtr_report),
+    )
+    staged = [staged_output(destination) for destination in destinations]
+    try:
+        for path, fields in zip(staged[1:], (CONCATEMER_FIELDS, DTR_FIELDS)):
+            with path.open("w", newline="") as handle:
+                csv.DictWriter(handle, fieldnames=fields).writeheader()
+        for source, destination in zip(staged, destinations):
+            os.replace(source, destination)
+        staged = []
+    finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
+
+def validate_result(input_record, result):
+    contig_id = input_record.id
+    corrected = result["corrected_record"]
+    concatemer = result["concatemer_report"]
+    dtr = result["dtr_report"]
+    if corrected.id != contig_id:
+        raise ValueError(f"Corrected FASTA ID changed from {contig_id!r} to {corrected.id!r}")
+    if concatemer.get("contig_id") != contig_id or dtr.get("contig_id") != contig_id:
+        raise ValueError(f"Correction report ID mismatch for {contig_id!r}")
+    if not corrected.seq:
+        raise ValueError(f"Correction produced an empty sequence for {contig_id!r}")
+    original_length = len(input_record.seq)
+    transitions = (
+        ("concatemer", int(concatemer["original_length"]), int(concatemer["corrected_length"])),
+        ("DTR", int(dtr["original_length"]), int(dtr["corrected_length"])),
+    )
+    if transitions[0][1] != original_length:
+        raise ValueError(f"Concatemer input length mismatch for {contig_id!r}")
+    if transitions[1][1] != transitions[0][2]:
+        raise ValueError(f"DTR input length mismatch for {contig_id!r}")
+    if transitions[1][2] != len(corrected.seq):
+        raise ValueError(f"Final corrected length mismatch for {contig_id!r}")
+    for (stage, before, after), row in zip(transitions, (concatemer, dtr)):
+        if after != before and row.get("status") != "corrected":
+            raise ValueError(f"{stage} length changed without a corrected report for {contig_id!r}")
 
 def process_single_contig(contig_data):
-    """Process a single contig through concatemer and DTR correction pipeline."""
-    contig_id, seq_record, args, script_dir, temp_base_dir = contig_data
-    
-    # Create temporary directory for this contig
-    temp_dir = tempfile.mkdtemp(dir=temp_base_dir, prefix=f"contig_{contig_id}_")
-    
+    contig_id, record, args, temp_base_dir = contig_data
+    original_length = len(record.seq)
+    record = copy.deepcopy(record)
+    temp_dir = tempfile.mkdtemp(dir=temp_base_dir, prefix="contig_")
+    stage = "initialization"
     try:
-        # Paths for temporary files
-        input_fasta = os.path.join(temp_dir, "input.fasta")
-        blast1_output = os.path.join(temp_dir, "blast1.txt")
-        concatemer_fasta = os.path.join(temp_dir, "concatemer.fasta")
-        concatemer_report = os.path.join(temp_dir, "concatemer.csv")
-        blast2_output = os.path.join(temp_dir, "blast2.txt")
-        dtr_fasta = os.path.join(temp_dir, "dtr.fasta")
-        dtr_report = os.path.join(temp_dir, "dtr.csv")
-        
-        # Write single contig to file
-        SeqIO.write([seq_record], input_fasta, "fasta")
-        
-        # Step 1: First BLAST
-        run_blast(input_fasta, blast1_output)
-        
-        # Step 2: Break concatemers
-        break_concatemers_script = os.path.join(script_dir, "break_concatemers.py")
-        cmd_concatemer = [
-            'python', break_concatemers_script,
-            '--blast', blast1_output,
-            '--fasta', input_fasta,
-            '--out_report', concatemer_report,
-            '--out_fasta', concatemer_fasta,
-            '--min_identity', str(args.min_identity),
-            '--min_repeat', str(args.min_repeat),
-            '--min_coverage', str(args.min_coverage)
-        ]
-        subprocess.run(cmd_concatemer, check=True, capture_output=True)
-        
-        # Step 3: Second BLAST on concatemer-corrected sequence
-        run_blast(concatemer_fasta, blast2_output)
-        
-        # Step 4: Break terminal repeats
-        break_dtr_script = os.path.join(script_dir, "break_terminal_repeats.py")
-        cmd_dtr = [
-            'python', break_dtr_script,
-            '--blast', blast2_output,
-            '--fasta', concatemer_fasta,
-            '--out_report', dtr_report,
-            '--out_fasta', dtr_fasta,
-            '--min_identity', str(args.min_identity),
-            '--max_distance', str(args.max_distance)
-        ]
-        subprocess.run(cmd_dtr, check=True, capture_output=True)
-        
-        # Read results
-        corrected_record = next(SeqIO.parse(dtr_fasta, "fasta"))
-        
-        with open(concatemer_report, 'r') as f:
-            reader = csv.DictReader(f)
-            concatemer_row = next(reader)
-        
-        with open(dtr_report, 'r') as f:
-            reader = csv.DictReader(f)
-            dtr_row = next(reader)
-        
+        input_fasta = Path(temp_dir) / "input.fasta"
+        first_blast = Path(temp_dir) / "blast1.tsv"
+        second_blast = Path(temp_dir) / "blast2.tsv"
+        stage = "writing input FASTA"
+        SeqIO.write([record], input_fasta, "fasta")
+        stage = "initial self-BLAST"
+        run_blast(input_fasta, first_blast)
+        stage = "concatemer correction"
+        record, concatemer = correct_concatemer(record, read_blast_hits(first_blast), args.min_identity,args.min_repeat, args.min_coverage)
+        stage = "writing concatemer-corrected FASTA"
+        SeqIO.write([record], input_fasta, "fasta")
+        stage = "post-concatemer self-BLAST"
+        run_blast(input_fasta, second_blast)
+        stage = "DTR correction"
+        record, dtr = correct_dtr(record, read_blast_hits(second_blast), args.min_identity, args.max_distance)
         return {
-            'contig_id': contig_id,
-            'corrected_record': corrected_record,
-            'concatemer_report': concatemer_row,
-            'dtr_report': dtr_row,
-            'success': True
+            "contig_id": contig_id, "corrected_record": record,
+            "concatemer_report": concatemer, "dtr_report": dtr, "success": True,
         }
-        
-    except Exception as e:
+    except Exception as error:
         return {
-            'contig_id': contig_id,
-            'error': str(e),
-            'success': False
+            "contig_id": contig_id, "stage": stage,
+            "original_length": original_length,
+            "error": exception_text(error), "success": False,
         }
-    
     finally:
-        # Clean up temporary directory
-        try:
-            shutil.rmtree(temp_dir)
-        except:
-            pass
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
+def write_outputs(args, input_records, results):
+    destinations = (args.out_fasta, args.out_concatemer_report, args.out_dtr_report)
+    staged = [staged_output(destination) for destination in destinations]
+    try:
+        if SeqIO.write([result["corrected_record"] for result in results], staged[0], "fasta") != len(results):
+            raise ValueError("Corrected FASTA record count mismatch")
+        for path, fields, key in (
+            (staged[1], CONCATEMER_FIELDS, "concatemer_report"),
+            (staged[2], DTR_FIELDS, "dtr_report"),
+        ):
+            with path.open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(result[key] for result in results)
+        for input_record, result in zip(input_records, results):
+            validate_result(input_record, result)
+        for path in staged:
+            if not path.is_file() or path.stat().st_size == 0:
+                raise ValueError(f"Staged output is missing or empty: {path}")
+        for source, destination in zip(staged, destinations):
+            os.replace(source, destination)
+        staged = []
+    finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
 
 def main():
     args = parse_arguments()
-    
-    # Determine script directory
-    if args.script_dir is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-    else:
-        script_dir = args.script_dir
-    
-    # Load all contigs
+    if args.threads < 1:
+        raise ValueError("--threads must be positive")
     print("Loading contigs from input FASTA...", flush=True)
     contigs = list(SeqIO.parse(args.fasta, "fasta"))
-    total_contigs = len(contigs)
-    print(f"Loaded {total_contigs} contigs", flush=True)
-    
-    # Create temporary base directory
+    if not contigs:
+        print(f"Input FASTA contains no viral sequences: {args.fasta}", flush=True)
+        publish_empty_outputs(args)
+        return
+    input_ids = [record.id for record in contigs]
+    duplicates = sorted(name for name, count in Counter(input_ids).items() if count > 1)
+    if duplicates:
+        raise ValueError(f"Duplicate input contig IDs: {duplicates[:10]}")
+    print(f"Loaded {len(contigs)} contigs", flush=True)
+
     temp_base_dir = tempfile.mkdtemp(prefix="phage_correction_")
-    
     try:
-        # Prepare data for parallel processing
-        contig_data = [
-            (record.id, record, args, script_dir, temp_base_dir)
-            for record in contigs
-        ]
-        
-        # Process contigs
-        print(f"Processing contigs with {args.threads} threads...", flush=True)
-        results = []
-        
-        processed_count = 0
-        
+        work = [(record.id, record, args, temp_base_dir) for record in contigs]
         if args.threads > 1:
             with Pool(args.threads) as pool:
-                for result in pool.imap_unordered(process_single_contig, contig_data):
-                    results.append(result)
-                    processed_count += 1
-                    if processed_count % 100 == 0 or processed_count == total_contigs:
-                        remaining = total_contigs - processed_count
-                        print(f"Processed {processed_count}/{total_contigs} contigs. Remaining: {remaining}", flush=True)
+                results = list(pool.imap_unordered(process_single_contig, work))
         else:
-            for data in contig_data:
-                result = process_single_contig(data)
-                results.append(result)
-                processed_count += 1
-                if processed_count % 100 == 0 or processed_count == total_contigs:
-                    remaining = total_contigs - processed_count
-                    print(f"Processed {processed_count}/{total_contigs} contigs. Remaining: {remaining}", flush=True)
-        
-        # Filter successful results
-        successful_results = [r for r in results if r['success']]
-        failed_results = [r for r in results if not r['success']]
-        
-        if failed_results:
-            print(f"\nWarning: {len(failed_results)} contigs failed processing:", flush=True)
-            for failure in failed_results[:10]:  # Show first 10 failures
-                print(f"  - {failure['contig_id']}: {failure['error']}", flush=True)
-            if len(failed_results) > 10:
-                print(f"  ... and {len(failed_results) - 10} more", flush=True)
-        
-        print(f"\nSuccessfully processed {len(successful_results)} contigs", flush=True)
-        
-        # Write combined corrected FASTA
-        print("Writing corrected FASTA file...", flush=True)
-        corrected_records = [r['corrected_record'] for r in successful_results]
-        SeqIO.write(corrected_records, args.out_fasta, "fasta")
-        
-        # Combine concatemer reports
-        print("Writing combined concatemer report...", flush=True)
-        concatemer_reports = [r['concatemer_report'] for r in successful_results]
-        if concatemer_reports:
-            with open(args.out_concatemer_report, 'w', newline='') as f:
-                fieldnames = concatemer_reports[0].keys()
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(concatemer_reports)
-        
-        # Combine DTR reports
-        print("Writing combined DTR report...", flush=True)
-        dtr_reports = [r['dtr_report'] for r in successful_results]
-        if dtr_reports:
-            with open(args.out_dtr_report, 'w', newline='') as f:
-                fieldnames = dtr_reports[0].keys()
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(dtr_reports)
-        
-        # Calculate statistics
-        print("\n" + "="*60, flush=True)
-        print("CORRECTION SUMMARY", flush=True)
-        print("="*60, flush=True)
-        
-        # Concatemer statistics
-        concatemers_corrected = sum(1 for r in concatemer_reports if r['status'] == 'corrected')
-        total_bp_removed_concatemers = sum(
-            int(r['original_length']) - int(r['corrected_length'])
-            for r in concatemer_reports if r['status'] == 'corrected'
-        )
-        print(f"\nConcatemers:", flush=True)
-        print(f"  Contigs corrected: {concatemers_corrected}/{len(successful_results)}", flush=True)
-        print(f"  Total bp removed: {total_bp_removed_concatemers:,}", flush=True)
-        if concatemers_corrected > 0:
-            avg_bp = total_bp_removed_concatemers / concatemers_corrected
-            print(f"  Average bp removed per corrected contig: {avg_bp:.1f}", flush=True)
-        
-        # DTR statistics
-        dtrs_corrected = sum(1 for r in dtr_reports if r['status'] == 'corrected')
-        total_bp_removed_dtrs = sum(
-            int(r['original_length']) - int(r['corrected_length'])
-            for r in dtr_reports if r['status'] == 'corrected'
-        )
-        print(f"\nDirect Terminal Repeats:", flush=True)
-        print(f"  Contigs corrected: {dtrs_corrected}/{len(successful_results)}", flush=True)
-        print(f"  Total bp removed: {total_bp_removed_dtrs:,}", flush=True)
-        if dtrs_corrected > 0:
-            avg_bp = total_bp_removed_dtrs / dtrs_corrected
-            print(f"  Average bp removed per corrected contig: {avg_bp:.1f}", flush=True)
-        
-        # Overall statistics
-        total_corrections = sum(
-            1 for r in successful_results 
-            if r['concatemer_report']['status'] == 'corrected' or r['dtr_report']['status'] == 'corrected'
-        )
-        total_bp_removed = total_bp_removed_concatemers + total_bp_removed_dtrs
-        print(f"\nOverall:", flush=True)
-        print(f"  Total contigs modified: {total_corrections}/{len(successful_results)}", flush=True)
-        print(f"  Total bp removed: {total_bp_removed:,}", flush=True)
-        
-        print("\n" + "="*60, flush=True)
-        print(f"Output files:", flush=True)
-        print(f"  Corrected FASTA: {args.out_fasta}", flush=True)
-        print(f"  Concatemer report: {args.out_concatemer_report}", flush=True)
-        print(f"  DTR report: {args.out_dtr_report}", flush=True)
-        print("="*60, flush=True)
-        
+            results = [process_single_contig(item) for item in work]
     finally:
-        # Clean up temporary base directory
-        print("\nCleaning up temporary files...", flush=True)
-        try:
-            shutil.rmtree(temp_base_dir)
-        except:
-            pass
-    
-    print("\nAnalysis complete!", flush=True)
+        shutil.rmtree(temp_base_dir, ignore_errors=True)
 
+    failures = [result for result in results if not result["success"]]
+    if failures:
+        for failure in sorted(failures, key=lambda item: item["contig_id"]):
+            print(
+                f"ERROR: {failure['contig_id']} (stage={failure['stage']}): "
+                f"{failure['error']}", flush=True,
+            )
+        raise RuntimeError(
+            f"Correction failed for {len(failures)}/{len(contigs)} contigs; no outputs published"
+        )
+    by_id = {result["contig_id"]: result for result in results}
+    if set(by_id) != set(input_ids) or len(results) != len(contigs):
+        raise ValueError("Correction result ID/count mismatch")
+    ordered = [by_id[contig_id] for contig_id in input_ids]
+    write_outputs(args, contigs, ordered)
+
+    concatemer_count = sum(r["concatemer_report"]["status"] == "corrected" for r in ordered)
+    dtr_count = sum(r["dtr_report"]["status"] == "corrected" for r in ordered)
+    concatemer_bp = sum(
+        r["concatemer_report"]["original_length"] - r["concatemer_report"]["corrected_length"]
+        for r in ordered if r["concatemer_report"]["status"] == "corrected"
+    )
+    dtr_bp = sum(
+        r["dtr_report"]["original_length"] - r["dtr_report"]["corrected_length"]
+        for r in ordered if r["dtr_report"]["status"] == "corrected"
+    )
+    print(
+        f"Corrected {concatemer_count} concatemers ({concatemer_bp} bp removed) and "
+        f"{dtr_count} DTRs ({dtr_bp} bp removed) across {len(contigs)} contigs.",
+        flush=True,
+    )
 
 if __name__ == "__main__":
     main()
