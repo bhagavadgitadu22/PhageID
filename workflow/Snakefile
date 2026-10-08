@@ -49,7 +49,7 @@ def comparison_pipeline_inputs(wildcards):
     if not active_viral_samples(wildcards):
         return [report_directory]
     return [report_directory, rules.ani_for_dereplication.output.ani_results,
-            *rules.viruses_dereplicated.output, *rules.lovis4u_pharokka.output,
+            *rules.viruses_dereplicated.output, *rules.dereplication_report.output, *rules.lovis4u_pharokka.output,
             *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output]
 
 ### Rules to include
@@ -69,7 +69,7 @@ include_smk_files('rules/')
 rule corrected_assembly_all_phages:
     input: lambda wildcards: checkpoints.viral_report_global.get().output.report
 
-# One rule to rule them all
+# Three rules to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
     input: per_sample_pipeline_inputs
@@ -81,7 +81,6 @@ rule pipeline_all_phages:
         report=lambda wildcards: checkpoints.viral_report_global.get().output.report,
         samples=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
 
-# Rule for a whole host
 rule pipeline_comparison_phages:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
     input: comparison_pipeline_inputs

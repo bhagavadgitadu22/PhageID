@@ -55,6 +55,17 @@ rule viruses_dereplicated:
         seqtk subseq {input.fna_viruses} {output.list_viruses_derep} > {output.fna_viruses_derep} && date) &> {log}
         """
 
+rule dereplication_report:
+    input:
+        fasta=rules.combine_all_viruses.output,
+        clusters=rules.ani_for_dereplication.output.clustering_results,
+        representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
+        ani=rules.ani_for_dereplication.output.ani_results
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "dereplication_report.tsv")
+    log: os.path.join(RESULTS_DIR, "logs", "dereplication_report.log")
+    shell:
+        """python ./scripts/dereplication_report.py --fasta {input.fasta:q} --clusters {input.clusters:q} --representatives {input.representatives:q} --ani {input.ani:q} --output {output:q} > {log:q} 2>&1"""
+
 # Resolve data-dependent sample/representative pairs after clustering.
 checkpoint prepare_post_dereplication_mapping:
     input:
