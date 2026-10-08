@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Report corrected viral contigs and select samples for downstream analysis."""
+"""Write contig and summary reports for one sample."""
 import argparse
 import csv
 from pathlib import Path
-from Bio import SeqIO
 
 CONTIG_FIELDS = ['Viral contig', 'Sample', 'Total bp', 'Total corrected bp', 'Coverage', 'Circular',
                  'Number of concatemers broken', 'DTR length removed']
@@ -28,11 +27,29 @@ def write_tsv(path, fields, rows):
         writer.writeheader()
         writer.writerows(rows)
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None):
-    records = list(SeqIO.parse(fasta, 'fasta'))
-    ids = {record.id for record in records}
-    if len(ids) != len(records):
-        raise ValueError(f'Duplicate corrected contig IDs for {sample}')
+def fasta_lengths(path):
+    lengths = {}
+    contig = None
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('>'):
+                contig = line[1:].split()[0]
+                if contig in lengths:
+                    raise ValueError(f'Duplicate corrected contig ID: {contig}')
+                lengths[contig] = 0
+            elif contig is None:
+                raise ValueError(f'Sequence before FASTA header in {path}')
+            else:
+                lengths[contig] += len(''.join(line.split()))
+    return lengths
+
+
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None):
+    lengths = fasta_lengths(fasta)
+    ids = set(lengths)
     concatemers = read_corrections(concatemer_report)
     dtrs = read_corrections(dtr_report)
     if ids != set(concatemers) or ids != set(dtrs):
@@ -48,31 +65,31 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
             flye[fields[0]] = fields
     rows = []
     prefix = sample + '_'
-    for record in records:
+    for contig, corrected_length in lengths.items():
         # rename_contigs prefixes the original Flye ID with the full sample ID.
-        original_id = record.id[len(prefix):] if record.id.startswith(prefix) else ''
+        original_id = contig[len(prefix):] if contig.startswith(prefix) else ''
         flye_id, separator, region = original_id.partition('|provirus_')
         if flye_id not in flye:
-            raise ValueError(f'No Flye metadata for {record.id}')
+            raise ValueError(f'No Flye metadata for {contig}')
         metadata = flye[flye_id]
         original_length = int(metadata[1])
         circular = metadata[3]
         if separator:
             start, end = map(int, region.split('_'))
             if not 1 <= start <= end <= original_length:
-                raise ValueError(f'Invalid provirus coordinates for {record.id}')
+                raise ValueError(f'Invalid provirus coordinates for {contig}')
             original_length = end - start + 1
             circular = 'N'
-        concatemer, dtr = concatemers[record.id], dtrs[record.id]
-        if int(dtr['original_length']) != int(concatemer['corrected_length']) or int(dtr['corrected_length']) != len(record.seq):
-            raise ValueError(f'Correction lengths do not match for {record.id}')
+        concatemer, dtr = concatemers[contig], dtrs[contig]
+        if int(dtr['original_length']) != int(concatemer['corrected_length']) or int(dtr['corrected_length']) != corrected_length:
+            raise ValueError(f'Correction lengths do not match for {contig}')
         if int(concatemer['original_length']) != original_length:
-            raise ValueError(f'Flye and correction lengths do not match for {record.id}')
+            raise ValueError(f'Flye and correction lengths do not match for {contig}')
         if metadata[3] not in {'Y', 'N'}:
-            raise ValueError(f'Invalid Flye circularity for {record.id}')
+            raise ValueError(f'Invalid Flye circularity for {contig}')
         float(metadata[2])  # Reject missing/malformed coverage rather than inventing a value.
         rows.append(dict(zip(CONTIG_FIELDS, [
-            record.id, sample, original_length, len(record.seq), metadata[2], circular,
+            contig, sample, original_length, corrected_length, metadata[2], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
             int(dtr['original_length']) - int(dtr['corrected_length']),
         ])))
@@ -81,6 +98,17 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
     if rows and (checkv or genomad):
         add_quality_metadata(rows, sample, checkv, genomad)
     write_tsv(output, CONTIG_FIELDS, rows)
+    if summary_output is not None:
+        write_tsv(summary_output, SAMPLE_FIELDS, [sample_summary(sample, rows)])
+
+
+def sample_summary(sample, rows):
+    return dict(zip(SAMPLE_FIELDS, [
+        sample, len(rows), sum(int(row['Total bp']) for row in rows),
+        sum(int(row['Total corrected bp']) for row in rows),
+        'ready' if rows else 'no_viral_contigs',
+    ]))
+
 
 def indexed_tsv(path, key):
     with open(path, newline='') as handle:
@@ -108,45 +136,15 @@ def add_quality_metadata(rows, sample, checkv, genomad):
         row['geNomad provirus'] = 'Yes' if taxonomy[original]['topology'] == 'Provirus' else 'No'
         row['geNomad taxonomy'] = taxonomy[original]['taxonomy']
 
-def combine_reports(sample_reports, output_dir):
-    all_rows, summaries = [], []
-    seen = set()
-    for sample, report in sample_reports:
-        with open(report, newline='') as handle:
-            reader = csv.DictReader(handle, delimiter='\t')
-            if reader.fieldnames != CONTIG_FIELDS:
-                raise ValueError(f'Unexpected contig report columns: {report}')
-            rows = list(reader)
-        for row in rows:
-            if row['Sample'] != sample or row['Viral contig'] in seen:
-                raise ValueError(f'Duplicate contig or incorrect sample in {report}')
-            seen.add(row['Viral contig'])
-        all_rows.extend(rows)
-        summaries.append(dict(zip(SAMPLE_FIELDS, [
-            sample, len(rows), sum(int(row['Total bp']) for row in rows),
-            sum(int(row['Total corrected bp']) for row in rows),
-            'ready' if rows else 'no_viral_contigs',
-        ])))
-    output = Path(output_dir)
-    write_tsv(output/'viral_contigs.tsv', CONTIG_FIELDS, all_rows)
-    write_tsv(output/'samples.tsv', SAMPLE_FIELDS, summaries)
-
-def build_reports(samples, results_dir, output_dir):
-    reports = []
-    for sample, fasta, flye, concatemer, dtr, checkv, genomad in samples:
-        output = Path(results_dir) / sample / 'assembly_stats.tsv'
-        sample_report(sample, fasta, flye, concatemer, dtr, output, checkv, genomad)
-        reports.append((sample, output))
-    combine_reports(reports, output_dir)
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sample-input', action='append', nargs=7, default=[],
-                        metavar=('SAMPLE', 'FASTA', 'FLYE', 'CONCATEMER', 'DTR', 'CHECKV', 'GENOMAD'))
-    parser.add_argument('--results-dir', required=True)
-    parser.add_argument('--output-dir', required=True)
+    for name in ['sample', 'fasta', 'flye-info', 'concatemer-report', 'dtr-report',
+                 'checkv', 'genomad', 'output', 'summary-output']:
+        parser.add_argument('--' + name, required=True)
     args = parser.parse_args()
-    build_reports(args.sample_input, args.results_dir, args.output_dir)
+    sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output)
+
 
 if __name__ == '__main__':
     main()

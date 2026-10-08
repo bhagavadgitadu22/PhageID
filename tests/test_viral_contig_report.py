@@ -36,8 +36,23 @@ class ViralReportTests(unittest.TestCase):
         write_csv(self.p/'concat.csv',self.concat,list(self.concat[0]))
         write_csv(self.p/'dtr.csv',self.dtr,list(self.dtr[0]))
 
+    def concatenate_reports(self, reports, output_dir):
+        import shlex
+        import subprocess
+        source=(ROOT/'workflow/rules/2_assembly.smk').read_text()
+        command=source.split('checkpoint viral_report_global:')[1].split('"""')[1]
+        quote=lambda value: shlex.quote(str(value))
+        command=command.replace(':q}', '}').format(
+            input=SimpleNamespace(contigs=shlex.join([str(report[1]) for report in reports]),
+                                  summaries=shlex.join([str(report[2]) for report in reports])),
+            output=SimpleNamespace(report=quote(output_dir)),
+            params=SimpleNamespace(contig_header=quote('\t'.join(module.CONTIG_FIELDS)),
+                                   sample_header=quote('\t'.join(module.SAMPLE_FIELDS))),
+            log=quote(self.p/'global.log'))
+        subprocess.run(['bash','-euo','pipefail','-c',command],check=True)
+
     def report(self):
-        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv')
+        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv', summary_output=self.p/'summary.tsv')
 
     def test_metadata_original_and_corrected_lengths(self):
         self.report()
@@ -53,7 +68,8 @@ class ViralReportTests(unittest.TestCase):
     def test_summary_keeps_empty_samples_and_sums_both_lengths(self):
         self.report()
         module.write_tsv(self.p/'empty.tsv',module.CONTIG_FIELDS,[])
-        module.combine_reports([('sample_with_underscores',self.p/'stats.tsv'),('empty',self.p/'empty.tsv')],self.p/'global')
+        module.write_tsv(self.p/'empty_summary.tsv',module.SAMPLE_FIELDS,[module.sample_summary('empty',[])])
+        self.concatenate_reports([('sample_with_underscores',self.p/'stats.tsv',self.p/'summary.tsv'),('empty',self.p/'empty.tsv',self.p/'empty_summary.tsv')],self.p/'global')
         rows=read_tsv(self.p/'global/samples.tsv')
         self.assertEqual((rows[0]['Total bp'],rows[0]['Total corrected bp']),('380','170'))
         self.assertEqual(rows[1],dict(zip(module.SAMPLE_FIELDS,['empty','0','0','0','no_viral_contigs'])))
@@ -72,13 +88,13 @@ class ViralReportTests(unittest.TestCase):
         ids = [row['contig_id'] for row in self.concat]
         module.write_tsv(self.p/'checkv.tsv', columns, [dict(zip(columns,[name,'10','8','2','High-quality','High-quality','95.2','AAI-based'])) for name in ids])
         module.write_tsv(self.p/'genomad.tsv', ['seq_name','topology','taxonomy'], [dict(seq_name='contig_1',topology='Provirus',taxonomy='Viruses;Caudoviricetes'),dict(seq_name='contig_2',topology='DTR',taxonomy='Unclassified')])
-        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv',self.p/'checkv.tsv',self.p/'genomad.tsv')
+        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv',self.p/'checkv.tsv',self.p/'genomad.tsv',self.p/'enriched_summary.tsv')
         rows=read_tsv(self.p/'enriched.tsv')
         self.assertEqual([row['geNomad provirus'] for row in rows], ['Yes','No'])
         self.assertEqual(rows[0]['CheckV completeness'], '95.2')
         self.assertEqual(rows[0]['CheckV gene count'], '10')
         self.assertEqual(rows[0]['geNomad taxonomy'], 'Viruses;Caudoviricetes')
-        module.combine_reports([('sample_with_underscores',self.p/'enriched.tsv')],self.p/'enriched_global')
+        self.concatenate_reports([('sample_with_underscores',self.p/'enriched.tsv',self.p/'enriched_summary.tsv')],self.p/'enriched_global')
         self.assertEqual(read_tsv(self.p/'enriched_global/viral_contigs.tsv'), rows)
 
     def test_provirus_uses_parent_coverage_and_region_length(self):
@@ -100,15 +116,29 @@ class ViralReportTests(unittest.TestCase):
         module.sample_report('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv')
         self.assertEqual(read_tsv(self.p/'enriched.tsv'), [])
 
-    def test_single_call_writes_per_sample_and_global_empty_reports(self):
+    def test_per_sample_then_global_empty_reports(self):
         (self.p/'input.fa').write_text('')
         write_csv(self.p/'concat.csv',[],list(self.concat[0]))
         write_csv(self.p/'dtr.csv',[],list(self.dtr[0]))
-        inputs=[('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'unused_checkv.tsv',self.p/'unused_genomad.tsv')]
-        module.build_reports(inputs,self.p/'results',self.p/'global')
+        contigs=self.p/'results/empty/assembly_stats.tsv'
+        summary=self.p/'results/empty/viral_sample_report.tsv'
+        module.sample_report('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',contigs,summary_output=summary)
+        self.concatenate_reports([('empty',contigs,summary)],self.p/'global')
         self.assertEqual(read_tsv(self.p/'results/empty/assembly_stats.tsv'), [])
         self.assertEqual(read_tsv(self.p/'global/viral_contigs.tsv'), [])
         self.assertEqual(read_tsv(self.p/'global/samples.tsv')[0]['Status'], 'no_viral_contigs')
+
+    def test_global_concatenation_with_no_samples_writes_headers(self):
+        self.concatenate_reports([],self.p/'global')
+        self.assertEqual(read_tsv(self.p/'global/viral_contigs.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/samples.tsv'), [])
+
+    def test_fasta_parser_multiline_and_duplicate_ids(self):
+        (self.p/'lengths.fa').write_text('>one description\nACG\nTT\n>two\nC\n')
+        self.assertEqual(module.fasta_lengths(self.p/'lengths.fa'),dict(one=5,two=1))
+        (self.p/'lengths.fa').write_text('>one\nAC\n>one\nGT\n')
+        with self.assertRaisesRegex(ValueError,'Duplicate'):
+            module.fasta_lengths(self.p/'lengths.fa')
 
     def test_checkv_skips_empty_fasta(self):
         import subprocess
@@ -133,7 +163,7 @@ class ViralReportTests(unittest.TestCase):
             patterns=[patterns] if isinstance(patterns,str) else patterns
             samples=[sample] if isinstance(sample,str) else sample
             return [pattern.format(sample=name) for name in samples for pattern in patterns]
-        namespace={'os':os,'checkpoints':SimpleNamespace(viral_sample_report=checkpoint),'PHAGES_LIST':['ready','empty'],'expand':expand}
+        namespace={'os':os,'checkpoints':SimpleNamespace(viral_report_global=checkpoint),'PHAGES_LIST':['ready','empty'],'expand':expand}
         source=(ROOT/'workflow/Snakefile').read_text()
         exec(source[source.index('def active_viral_samples'):source.index('### Rules to include')],namespace)
         self.assertEqual(namespace['active_sample_files']('{sample}/annotation')(None),['ready/annotation'])

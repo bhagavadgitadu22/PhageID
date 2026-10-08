@@ -1,8 +1,0 @@
-- Assemble and annotate all contigs classified as viral by geNomad above 1 kbp
-- Would allow for contigs like Pseudomonas to still get the viral bits that I got
-- No more output_failed, instead count at the end number of contigs potentially acceptable -> circular + viral for geNomad + quality above x + coverage above y + ...
--> It would tell me which samples are worth resequencing and which ones are not worth
-- For comparison post that, I could distinguish comparison with all contigs from comparisons with only contigs which passed previous completeness filters
-- Make global theBIGbam database for all viral contigs, with special metadata specifying if contig complete, circular, representative of its cluster...
--> 3 tBb database for all contigs vs all complete ones vs only representative and their original samples (ie one sample per representative)
-- Ideally I should not change a representative if already decided in a previous run -> instead I should affect new phages to previous clusters

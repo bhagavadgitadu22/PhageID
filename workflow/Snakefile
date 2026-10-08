@@ -24,7 +24,7 @@ PHAGES_LIST = list(READ_FILES.keys())
 
 def active_viral_samples(wildcards):
     import csv
-    report_directory = checkpoints.viral_sample_report.get().output.report
+    report_directory = checkpoints.viral_report_global.get().output.report
     with open(os.path.join(report_directory, "samples.tsv"), newline="") as handle:
         return [row["Sample"] for row in csv.DictReader(handle, delimiter="\t") if row["Status"] == "ready"]
 
@@ -32,7 +32,7 @@ def active_sample_files(pattern):
     return lambda wildcards: expand(pattern, sample=active_viral_samples(wildcards))
 
 def per_sample_pipeline_inputs(wildcards):
-    report_directory = checkpoints.viral_sample_report.get().output.report
+    report_directory = checkpoints.viral_report_global.get().output.report
     if wildcards.sample not in PHAGES_LIST:
         raise ValueError(f"Unknown sample: {wildcards.sample}")
     if wildcards.sample not in active_viral_samples(wildcards):
@@ -45,7 +45,7 @@ def per_sample_pipeline_inputs(wildcards):
     return expand(outputs, sample=wildcards.sample)
 
 def comparison_pipeline_inputs(wildcards):
-    report_directory = checkpoints.viral_sample_report.get().output.report
+    report_directory = checkpoints.viral_report_global.get().output.report
     if not active_viral_samples(wildcards):
         return [report_directory]
     return [report_directory, rules.ani_for_dereplication.output.ani_results,
@@ -67,7 +67,7 @@ include_smk_files('rules/')
 ### Global rules
 # Assembly rules
 rule corrected_assembly_all_phages:
-    input: lambda wildcards: checkpoints.viral_sample_report.get().output.report
+    input: lambda wildcards: checkpoints.viral_report_global.get().output.report
 
 # One rule to rule them all
 rule pipeline_new_phage:
@@ -78,7 +78,7 @@ rule pipeline_new_phage:
 rule pipeline_all_phages:
     default_target: True
     input:
-        report=lambda wildcards: checkpoints.viral_sample_report.get().output.report,
+        report=lambda wildcards: checkpoints.viral_report_global.get().output.report,
         samples=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
 
 # Rule for a whole host

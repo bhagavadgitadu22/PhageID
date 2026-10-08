@@ -1,3 +1,3 @@
 ### TO-MODIFY: Location of directories
 samples_file: "../data/samples.tsv"
-results_dir: "/work/river/AKIRA/output_files"
+results_dir: "/scratch/boutroux/AKIRA"

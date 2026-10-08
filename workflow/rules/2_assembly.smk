@@ -95,24 +95,43 @@ rule checkv:
         ) > {log:q} 2>&1
         """
 
-# Produce complete per-sample and global reports, then select samples for annotation.
-checkpoint viral_sample_report:
+# Produce the contig table and one summary row for this sample after CheckV.
+rule viral_report:
     input:
-        fasta=expand(rules.fix_circular_viral_contigs_per_sample.output.corrected, sample=PHAGES_LIST),
-        flye=expand(rules.assembly_reads_flye.output.info, sample=PHAGES_LIST),
-        concatemer=expand(rules.fix_circular_viral_contigs_per_sample.output.concatemer_report, sample=PHAGES_LIST),
-        dtr=expand(rules.fix_circular_viral_contigs_per_sample.output.dtr_report, sample=PHAGES_LIST),
-        checkv=expand(rules.checkv.output.checkv_quality, sample=PHAGES_LIST),
-        genomad=expand(rules.genomad.output.summary, sample=PHAGES_LIST)
+        fasta=rules.fix_circular_viral_contigs_per_sample.output.corrected,
+        flye=rules.assembly_reads_flye.output.info,
+        concatemer=rules.fix_circular_viral_contigs_per_sample.output.concatemer_report,
+        dtr=rules.fix_circular_viral_contigs_per_sample.output.dtr_report,
+        checkv=rules.checkv.output.checkv_quality,
+        genomad=rules.genomad.output.summary
     output:
-        report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs")),
-        stats=expand(os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"), sample=PHAGES_LIST)
-    params:
-        results_dir=RESULTS_DIR,
-        sample_args=lambda wc, input: [value
-            for entries in zip(PHAGES_LIST, input.fasta, input.flye, input.concatemer, input.dtr, input.checkv, input.genomad)
-            for value in ("--sample-input", *entries)]
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "viral_sample_report.log")
+        contigs=os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"),
+        summary=os.path.join(RESULTS_DIR, "{sample}", "viral_sample_report.tsv")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_report.log")
     shell:
-        """python ./scripts/viral_contig_report.py {params.sample_args:q} --results-dir {params.results_dir:q} --output-dir {output.report:q} > {log:q} 2>&1"""
+        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --fasta {input.fasta:q} --flye-info {input.flye:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
+
+# Concatenate per-sample reports before selecting samples for annotation.
+checkpoint viral_report_global:
+    input:
+        contigs=expand(rules.viral_report.output.contigs, sample=PHAGES_LIST),
+        summaries=expand(rules.viral_report.output.summary, sample=PHAGES_LIST)
+    output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
+    params:
+        contig_header='Viral contig\tSample\tTotal bp\tTotal corrected bp\tCoverage\tCircular\tNumber of concatemers broken\tDTR length removed\tCheckV gene count\tCheckV viral genes\tCheckV host genes\tCheckV quality\tMIUVIG quality\tCheckV completeness\tCheckV completeness_method\tgeNomad provirus\tgeNomad taxonomy',
+        sample_header='Sample\tViral contigs\tTotal bp\tTotal corrected bp\tStatus'
+    log: os.path.join(RESULTS_DIR, "logs", "viral_report_global.log")
+    shell:
+        """
+        (
+            mkdir -p {output.report:q}
+            printf '%s\n' {params.contig_header:q} > {output.report:q}/viral_contigs.tsv
+            for file in {input.contigs:q}; do
+                awk 'FNR > 1' "$file" >> {output.report:q}/viral_contigs.tsv
+            done
+            printf '%s\n' {params.sample_header:q} > {output.report:q}/samples.tsv
+            for file in {input.summaries:q}; do
+                awk 'FNR > 1' "$file" >> {output.report:q}/samples.tsv
+            done
+        ) > {log:q} 2>&1
+        """
