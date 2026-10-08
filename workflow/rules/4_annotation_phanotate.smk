@@ -99,3 +99,4 @@ rule combine_empathi_with_sublyme:
         """(date &&
         python ./scripts/combine_empathi_with_sublyme.py --empathi {input.empathi:q} --sublyme {input.sublyme:q} --output {output:q} &&
         date) > {log:q} 2>&1"""
+

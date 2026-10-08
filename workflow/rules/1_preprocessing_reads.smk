@@ -28,9 +28,22 @@ rule remove_bacterial_contamination:
     output: os.path.join(RESULTS_DIR, "{sample}", "reads", "cleaned.{sample}.fastq")
     input: 
         reads = rules.preprocess_reads_porechop.output,
-        ref = lambda wc: HOSTS_LIST[wc.sample],
+        ref = lambda wc: [HOSTS_LIST[wc.sample]] if HOSTS_LIST[wc.sample] else [],
+    params: has_host=lambda wc: int(bool(HOSTS_LIST[wc.sample]))
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_remove_bacterial_contamination.log")
     shell:
-        """(date && minimap2 -t {threads} -ax map-ont {input.ref} {input.reads} | samtools view -@ {threads} -b -f 4 - | samtools fastq - > {output} && date) &> {log}"""
+        """
+        (
+            date
+            if (( {params.has_host} )); then
+                minimap2 -t {threads} -ax map-ont {input.ref:q} {input.reads:q} |
+                    samtools view -@ {threads} -b -f 4 - | samtools fastq - > {output:q}
+            else
+                echo "No host genome supplied; retaining all adapter-trimmed reads."
+                cp {input.reads:q} {output:q}
+            fi
+            date
+        ) &> {log:q}
+        """

@@ -14,9 +14,11 @@ with open(SAMPLES_FILE) as f:
 
     for line in f:
         if line.strip():
-            sample, r1, host = line.rstrip("\n").split("\t")[:3]
+            fields = line.rstrip("\r\n").split("\t")
+            sample, r1 = fields[:2]
+            host = fields[2].strip() if len(fields) > 2 else ""
             READ_FILES[sample] = r1
-            HOSTS_LIST[sample] = host
+            HOSTS_LIST[sample] = "" if host.lower() in {"", "na", "none", "-"} else host
 
 PHAGES_LIST = list(READ_FILES.keys())
 
@@ -35,7 +37,7 @@ def per_sample_pipeline_inputs(wildcards):
         raise ValueError(f"Unknown sample: {wildcards.sample}")
     if wildcards.sample not in active_viral_samples(wildcards):
         return [report_directory]
-    outputs = [*rules.phage_contig_info.output, *rules.genomad.output,
+    outputs = [*rules.genomad.output,
                *rules.phageterm.output, *rules.checkv.output,
                *rules.pharokka_plot.output, *rules.genotate_pharokka_plot.output,
                rules.antiDefenseFinder.output.systems,

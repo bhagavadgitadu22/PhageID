@@ -51,7 +51,7 @@ The tables follow the Cell Press STAR Methods convention. Software identifiers b
 | REAGENT or RESOURCE | SOURCE | IDENTIFIER |
 | --- | --- | --- |
 | Long-read sequencing data | User-supplied sample data | Per-sample read directories specified in `data/samples.tsv`; accession numbers not recorded in the workflow |
-| Host reference genomes | User-supplied reference data | Host genome FASTA paths specified in `data/samples.tsv`; accession numbers not recorded in the workflow |
+| Host reference genomes | User-supplied reference data | Optional host genome FASTA paths specified in `data/samples.tsv`; accession numbers not recorded in the workflow |
 | geNomad database | [geNomad database](https://portal.nersc.gov/genomad/) | `/work/river/Databases/genomad_db/`; release not recorded |
 | CheckV database | [CheckV database](https://portal.nersc.gov/CheckV/) | v1.5; `/work/river/Databases/checkv-db-v1.5/` |
 | Pharokka database bundle | [Pharokka](https://github.com/gbouras13/pharokka) | `/work/river/Databases/pharokka_db/`; release not recorded |
@@ -67,3 +67,9 @@ Database identifiers reflect the configured paths and download commands; local d
 
 If you use this worflow in your research, please cite this paper:
     Wai Hoe Chin, Martin Boutroux, Akira Harding, Davide Demurtas, Florian Baier, Hannes Peter (2026). Viral isolation reveals novel and diverse phages infecting natural stream biofilms. bioRxiv 2026.03.26.713887. https://doi.org/10.64898/2026.03.26.713887
+
+## Sample sheet
+
+`data/samples.tsv` is tab-separated, without a header: sample name, reads directory, and an optional host genome FASTA path. Omit the third field or leave it empty (also accepted: `NA`, `None`, or `-`) when no host genome is available. In that case, host-read filtering is skipped and all adapter-trimmed reads are retained for theBIGbam. Assembly always uses adapter-trimmed reads. A supplied host FASTA path must exist.
+
+Per-sample `assembly_stats.tsv` and the global `reports/viral_contigs/viral_contigs.tsv` include CheckV gene counts, quality, completeness and completeness method, and geNomad provirus status and taxonomy. CheckV describes corrected sequences; geNomad describes the original viral sequences. A single reporting checkpoint writes per-sample and global tables, then selects samples with viral contigs for annotation. CheckV is skipped for empty viral FASTAs. Provirus coverage comes from the parent Flye contig; its reported length is the extracted region, and it is not marked circular.

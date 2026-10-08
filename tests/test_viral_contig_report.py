@@ -66,6 +66,62 @@ class ViralReportTests(unittest.TestCase):
         self.report()
         self.assertEqual(read_tsv(self.p/'stats.tsv'),[])
 
+    def test_enrichment_joins_checkv_and_genomad_ids(self):
+        self.report()
+        columns = ['contig_id', 'gene_count', 'viral_genes', 'host_genes', 'checkv_quality', 'miuvig_quality', 'completeness', 'completeness_method']
+        ids = [row['contig_id'] for row in self.concat]
+        module.write_tsv(self.p/'checkv.tsv', columns, [dict(zip(columns,[name,'10','8','2','High-quality','High-quality','95.2','AAI-based'])) for name in ids])
+        module.write_tsv(self.p/'genomad.tsv', ['seq_name','topology','taxonomy'], [dict(seq_name='contig_1',topology='Provirus',taxonomy='Viruses;Caudoviricetes'),dict(seq_name='contig_2',topology='DTR',taxonomy='Unclassified')])
+        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv',self.p/'checkv.tsv',self.p/'genomad.tsv')
+        rows=read_tsv(self.p/'enriched.tsv')
+        self.assertEqual([row['geNomad provirus'] for row in rows], ['Yes','No'])
+        self.assertEqual(rows[0]['CheckV completeness'], '95.2')
+        self.assertEqual(rows[0]['CheckV gene count'], '10')
+        self.assertEqual(rows[0]['geNomad taxonomy'], 'Viruses;Caudoviricetes')
+        module.combine_reports([('sample_with_underscores',self.p/'enriched.tsv')],self.p/'enriched_global')
+        self.assertEqual(read_tsv(self.p/'enriched_global/viral_contigs.tsv'), rows)
+
+    def test_provirus_uses_parent_coverage_and_region_length(self):
+        name='sample_with_underscores_contig_1|provirus_11_110'
+        (self.p/'input.fa').write_text('>'+name+'\n'+'A'*100+'\n')
+        concat=dict(contig_id=name,original_length=100,corrected_length=100,num_copies=0,status='no_repeats')
+        dtr=dict(contig_id=name,original_length=100,corrected_length=100)
+        write_csv(self.p/'concat.csv',[concat],list(concat))
+        write_csv(self.p/'dtr.csv',[dtr],list(dtr))
+        self.report()
+        row=read_tsv(self.p/'stats.tsv')[0]
+        self.assertEqual((row['Total bp'],row['Coverage'],row['Circular']),('100','42','N'))
+
+    def test_empty_enrichment_needs_no_annotations(self):
+        module.write_tsv(self.p/'empty.tsv',module.CONTIG_FIELDS,[])
+        (self.p/'input.fa').write_text('')
+        write_csv(self.p/'concat.csv',[],list(self.concat[0]))
+        write_csv(self.p/'dtr.csv',[],list(self.dtr[0]))
+        module.sample_report('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv')
+        self.assertEqual(read_tsv(self.p/'enriched.tsv'), [])
+
+    def test_single_call_writes_per_sample_and_global_empty_reports(self):
+        (self.p/'input.fa').write_text('')
+        write_csv(self.p/'concat.csv',[],list(self.concat[0]))
+        write_csv(self.p/'dtr.csv',[],list(self.dtr[0]))
+        inputs=[('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'unused_checkv.tsv',self.p/'unused_genomad.tsv')]
+        module.build_reports(inputs,self.p/'results',self.p/'global')
+        self.assertEqual(read_tsv(self.p/'results/empty/assembly_stats.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/viral_contigs.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/samples.tsv')[0]['Status'], 'no_viral_contigs')
+
+    def test_checkv_skips_empty_fasta(self):
+        import subprocess
+        source=(ROOT/'workflow/rules/2_assembly.smk').read_text()
+        command=source.split('rule checkv:')[1].split('"""')[1]
+        (self.p/'empty.fa').write_text('')
+        output=self.p/'checkv/quality_summary.tsv'
+        log=self.p/'checkv.log'
+        command=command.replace(':q}', '}').format(threads=1,input=SimpleNamespace(assembly=self.p/'empty.fa',db=self.p/'unused_db'),output=SimpleNamespace(checkv_quality=output),log=log)
+        subprocess.run(['bash','-euo','pipefail','-c',command],check=True)
+        self.assertEqual(read_tsv(output), [])
+        self.assertIn('skipping CheckV',log.read_text())
+
     def test_missing_metadata_fails(self):
         (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcirc.\n')
         with self.assertRaisesRegex(ValueError,'No Flye metadata'): self.report()

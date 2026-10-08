@@ -14,7 +14,9 @@ rule assembly_reads_flye:
 
 # running geNomad to check for viral sequences and their taxonomy
 rule genomad:
-    output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna")
+    output:
+        fasta=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna"),
+        summary=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus_summary.tsv")
     input: 
         assembly = rules.assembly_reads_flye.output.assembly,
         db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
@@ -23,12 +25,12 @@ rule genomad:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad.log")
     message: "Running geNomad"
     shell:
-        "(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.assembly} $(dirname $(dirname {output})) $(dirname {input.db}) && date) &> {log}"
+        "(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.assembly} $(dirname $(dirname {output.fasta})) $(dirname {input.db}) && date) &> {log}"
 
 # keeping viral contigs longer than 2 kbp
 rule keep_long_viral_contigs:
     output: os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "viral_above_2_kbp.fna")
-    input: rules.genomad.output
+    input: rules.genomad.output.fasta
     conda: os.path.join(ENV_DIR, "preprocessing.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_keep_long_viral_contigs.log")
     shell:
@@ -67,29 +69,50 @@ rule fix_circular_viral_contigs_per_sample:
         date) &> {log}
         """
 
-# One row per corrected viral contig, including Flye and correction metadata.
-rule phage_contig_info:
-    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv")
-    input:
-        fasta=rules.fix_circular_viral_contigs_per_sample.output.corrected,
-        flye=rules.assembly_reads_flye.output.info,
-        concatemer=rules.fix_circular_viral_contigs_per_sample.output.concatemer_report,
-        dtr=rules.fix_circular_viral_contigs_per_sample.output.dtr_report
-    params:
-        script=workflow.basedir + "/scripts/viral_contig_report.py"
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_stats.log")
+# CheckV to assess completeness
+rule checkv:
+    output: 
+        checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"),
+    input: 
+        db = "/work/river/Databases/checkv-db-v1.5",
+        assembly = rules.fix_circular_viral_contigs_per_sample.output.corrected
+    conda: os.path.join(ENV_DIR, "checkv.yaml")
+    threads: 4
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_checkv.log")
+    message: "Running the first CheckV per assembly"
     shell:
-        """python {params.script:q} sample --sample {wildcards.sample:q} --fasta {input.fasta:q} --flye-info {input.flye:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --output {output:q} > {log:q} 2>&1"""
+        """
+        (
+            date
+            if grep -q '^>' {input.assembly:q}; then
+                checkv end_to_end -t {threads} -d {input.db:q} {input.assembly:q} $(dirname {output.checkv_quality:q})
+            else
+                echo "No viral contigs; skipping CheckV."
+                mkdir -p $(dirname {output.checkv_quality:q})
+                printf 'contig_id\tgene_count\tviral_genes\thost_genes\tcheckv_quality\tmiuvig_quality\tcompleteness\tcompleteness_method\n' > {output.checkv_quality:q}
+            fi
+            date
+        ) > {log:q} 2>&1
+        """
 
+# Produce complete per-sample and global reports, then select samples for annotation.
 checkpoint viral_sample_report:
-    input: expand(os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"), sample=PHAGES_LIST)
-    output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
+    input:
+        fasta=expand(rules.fix_circular_viral_contigs_per_sample.output.corrected, sample=PHAGES_LIST),
+        flye=expand(rules.assembly_reads_flye.output.info, sample=PHAGES_LIST),
+        concatemer=expand(rules.fix_circular_viral_contigs_per_sample.output.concatemer_report, sample=PHAGES_LIST),
+        dtr=expand(rules.fix_circular_viral_contigs_per_sample.output.dtr_report, sample=PHAGES_LIST),
+        checkv=expand(rules.checkv.output.checkv_quality, sample=PHAGES_LIST),
+        genomad=expand(rules.genomad.output.summary, sample=PHAGES_LIST)
+    output:
+        report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs")),
+        stats=expand(os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"), sample=PHAGES_LIST)
     params:
-        script=workflow.basedir + "/scripts/viral_contig_report.py",
-        sample_args=lambda wildcards, input: [value for sample, report in zip(PHAGES_LIST, input)
-                                             for value in ("--sample-report", sample, str(report))]
+        results_dir=RESULTS_DIR,
+        sample_args=lambda wc, input: [value
+            for entries in zip(PHAGES_LIST, input.fasta, input.flye, input.concatemer, input.dtr, input.checkv, input.genomad)
+            for value in ("--sample-input", *entries)]
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "viral_sample_report.log")
     shell:
-        """python {params.script:q} combine {params.sample_args:q} --output-dir {output.report:q} > {log:q} 2>&1"""
+        """python ./scripts/viral_contig_report.py {params.sample_args:q} --results-dir {params.results_dir:q} --output-dir {output.report:q} > {log:q} 2>&1"""

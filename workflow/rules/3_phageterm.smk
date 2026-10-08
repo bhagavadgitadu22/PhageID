@@ -1,17 +1,3 @@
-# CheckV to assess completeness
-rule checkv:
-    output: 
-        checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"),
-    input: 
-        db = "/work/river/Databases/checkv-db-v1.5",
-        assembly = rules.fix_circular_viral_contigs_per_sample.output.corrected
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
-    threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_checkv.log")
-    message: "Running the first CheckV per assembly"
-    shell:
-        """(date && checkv end_to_end -t {threads} -d {input.db:q} {input.assembly} $(dirname {output.checkv_quality}) && date) &> {log}"""
-
 # Install into an explicit venv retained alongside the pinned source release.
 rule phageterm_preparation:
     output: installation=directory(os.path.join(RESULTS_DIR, "software", "PhageTerm", "phagetermvirome-4.3"))
@@ -33,7 +19,6 @@ rule phageterm_preparation:
         export PYTHONPATH="$PWD/phagetermvirome" &&
         "$VIRTUAL_ENV/bin/phageterm" --help &&
         date) &> {log:q}"""
-
 
 rule phageterm:
     output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf")
