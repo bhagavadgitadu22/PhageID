@@ -36,33 +36,29 @@ include_smk_files('rules/')
 
 ### Global rules
 # Assembly rules
-rule assembly_all_phages:
-    input: expand(rules.assembly_reads_flye.output.assembly, sample = PHAGES_LIST)
-
-rule filtered_assembly_all_phages:
-    input: expand(rules.multiqc_assembly.output, sample = PHAGES_LIST)
+rule corrected_assembly_all_phages:
+    input: expand(rules.quality_assembly.output, sample = PHAGES_LIST)
 
 # One rule to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
     input: 
-        assembly_report = rules.multiqc_assembly.output,
+        assembly_report = rules.quality_assembly.output,
         pharokka_plot = rules.pharokka_plot.output,
         phold_plot = rules.phold_plot.output,
-        genotate_plot = rules.genotate_phold_plot.output,
+        genotate_plot = rules.genotate_pharokka_plot.output,
         defenseFinder_report = rules.antiDefenseFinder.output, 
         phageterm_report = rules.phageterm.output,
-        vibrant_report = rules.vibrant.output,
         genomad_report = rules.genomad.output,
         checkv_report = rules.checkv.output
     shell: """touch {output}"""
-    
+
 rule pipeline_all_phages:
     input: expand(os.path.join(RESULTS_DIR, "{sample}", "done.touch"), sample = PHAGES_LIST)
 
 # Rule for a whole host
-rule pipeline_one_host:
-    output: os.path.join(RESULTS_DIR, "analysis_per_host", "{genus}", "done.touch")
+rule pipeline_comparison_phages:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
     input:
 	    ani = rules.fast_ani.output.fastani,
 	    pharokka = rules.lovis4u_pharokka.output

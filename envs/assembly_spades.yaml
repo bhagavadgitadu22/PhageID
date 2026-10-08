@@ -3,6 +3,4 @@ channels:
  - bioconda
  - defaults
 dependencies:
- - python=3.10.13
- - snakemake=7.32.4
- - mamba=1.5.6
+ - spades=4.2.0

@@ -42,10 +42,45 @@ rule rename_contigs:
     shell:
         """(date && awk -v sample={wildcards.sample} '/^>/ {print ">" sample "_" substr($0, 2); next} {print}' {input} > {output} && date) &> {log}"""
 
+# Autoblast to detect potential duplications of the phage (concatemers)
+rule break_concatemers_with_autoblast:
+    output: 
+        corrected = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected_breaking_concatemers.fasta"),
+        report = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_report_breaking_concatemers.csv")
+    input: rules.rename_contigs.output
+    conda: os.path.join(ENV_DIR, "checkv.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_autoblast.log")
+    shell:
+        r"""
+        (date && 
+        # Run BLAST against itself
+        blastn -query {input} -subject {input} -outfmt "6 qseqid sseqid pident length qstart qend qlen sstart send slen" -evalue 1e-10 > {input}.blast.tsv 2>> {log}
+        # Analyze results for duplications
+        python scripts/break_concatemers.py --blast {input}.blast.tsv --fasta {input} --out_report {output.report} --out_fasta {output.corrected} &&
+        date) &> {log}
+        """
+
+rule break_terminal_repeats_with_autoblast:
+    output: 
+        corrected = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_corrected_breaking_terminal_repeats.fasta"),
+        report = os.path.join(RESULTS_DIR, "{sample}", "flye", "autoblast_report_breaking_terminal_repeats.csv")
+    input: rules.break_concatemers_with_autoblast.output.corrected
+    conda: os.path.join(ENV_DIR, "viral_detection.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_autoblast.log")
+    shell:
+        r"""
+        (date && 
+        # Run BLAST against itself
+        blastn -query {input} -subject {input} -outfmt "6 qseqid sseqid pident length qstart qend qlen sstart send slen" -evalue 1e-10 > {input}.blast.tsv 2>> {log}
+        # Analyze results for duplications
+        python scripts/break_terminal_repeats.py --blast {input}.blast.tsv --fasta {input} --out_report {output.report} --out_fasta {output.corrected} &&
+        date) &> {log}
+        """
+
 # assessing characteristics of final viral contigs
 rule phage_contig_info:
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv")
-    input: rules.keep_long_viral_contigs.output
+    input: rules.break_terminal_repeats_with_autoblast.output.corrected
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_stats.log")
     shell:
         """(date && ./scripts/contig_info.sh -m 1000 -t {input} > {output} && date) &> {log}"""

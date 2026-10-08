@@ -46,8 +46,6 @@ rule phold_plot:
     shell:
         """(date && phold plot --force -i {input.phold_gbk} -o {output} && date) &> {log}"""
 
-# Empathi
-
 # empathi on viral contigs
 rule empathi_install:
     output: directory(os.path.join(RESULTS_DIR, "software", "empathi"))

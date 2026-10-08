@@ -1,0 +1,7 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - pip
+  - pip:
+    - lovis4u==0.1.5

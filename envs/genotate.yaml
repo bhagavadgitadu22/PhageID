@@ -1,4 +1,3 @@
-name: genotate
 channels:
   - defaults
   - conda-forge
