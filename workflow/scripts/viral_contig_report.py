@@ -7,7 +7,7 @@ from pathlib import Path
 CONTIG_FIELDS = ['Viral contig', 'Sample', 'Total bp', 'Total corrected bp', 'Coverage', 'Circular',
                  'Number of concatemers broken', 'DTR length removed']
 ANNOTATION_FIELDS = ['CheckV gene count', 'CheckV viral genes', 'CheckV host genes',
-                     'CheckV quality', 'MIUVIG quality', 'CheckV completeness', 'CheckV completeness_method',
+                     'CheckV quality', 'MIUVIG quality', 'CheckV completeness', 'CheckV contamination',
                      'geNomad provirus', 'geNomad taxonomy']
 CONTIG_FIELDS += ANNOTATION_FIELDS
 SAMPLE_FIELDS = ['Sample', 'Viral contigs', 'Total bp', 'Total corrected bp', 'Status']
@@ -126,7 +126,7 @@ def add_quality_metadata(rows, sample, checkv, genomad):
     columns = {'CheckV gene count': 'gene_count', 'CheckV viral genes': 'viral_genes',
                'CheckV host genes': 'host_genes', 'CheckV quality': 'checkv_quality',
                'MIUVIG quality': 'miuvig_quality', 'CheckV completeness': 'completeness',
-               'CheckV completeness_method': 'completeness_method'}
+               'CheckV contamination': 'contamination'}
     for row in rows:
         contig = row['Viral contig']
         original = contig.removeprefix(sample + '_')

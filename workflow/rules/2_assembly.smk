@@ -89,7 +89,7 @@ rule checkv:
             else
                 echo "No viral contigs; skipping CheckV."
                 mkdir -p $(dirname {output.checkv_quality:q})
-                printf 'contig_id\tgene_count\tviral_genes\thost_genes\tcheckv_quality\tmiuvig_quality\tcompleteness\tcompleteness_method\n' > {output.checkv_quality:q}
+                printf 'contig_id\tgene_count\tviral_genes\thost_genes\tcheckv_quality\tmiuvig_quality\tcompleteness\tcontamination\n' > {output.checkv_quality:q}
             fi
             date
         ) > {log:q} 2>&1
@@ -118,7 +118,7 @@ checkpoint viral_report_global:
         summaries=expand(rules.viral_report.output.summary, sample=PHAGES_LIST)
     output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
     params:
-        contig_header='Viral contig\tSample\tTotal bp\tTotal corrected bp\tCoverage\tCircular\tNumber of concatemers broken\tDTR length removed\tCheckV gene count\tCheckV viral genes\tCheckV host genes\tCheckV quality\tMIUVIG quality\tCheckV completeness\tCheckV completeness_method\tgeNomad provirus\tgeNomad taxonomy',
+        contig_header='Viral contig\tSample\tTotal bp\tTotal corrected bp\tCoverage\tCircular\tNumber of concatemers broken\tDTR length removed\tCheckV gene count\tCheckV viral genes\tCheckV host genes\tCheckV quality\tMIUVIG quality\tCheckV completeness\tCheckV contamination\tgeNomad provirus\tgeNomad taxonomy',
         sample_header='Sample\tViral contigs\tTotal bp\tTotal corrected bp\tStatus'
     log: os.path.join(RESULTS_DIR, "logs", "viral_report_global.log")
     shell:

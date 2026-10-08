@@ -84,14 +84,18 @@ class ViralReportTests(unittest.TestCase):
 
     def test_enrichment_joins_checkv_and_genomad_ids(self):
         self.report()
-        columns = ['contig_id', 'gene_count', 'viral_genes', 'host_genes', 'checkv_quality', 'miuvig_quality', 'completeness', 'completeness_method']
+        columns = ['contig_id', 'gene_count', 'viral_genes', 'host_genes', 'checkv_quality', 'miuvig_quality', 'completeness', 'contamination']
         ids = [row['contig_id'] for row in self.concat]
-        module.write_tsv(self.p/'checkv.tsv', columns, [dict(zip(columns,[name,'10','8','2','High-quality','High-quality','95.2','AAI-based'])) for name in ids])
+        module.write_tsv(self.p/'checkv.tsv', columns, [dict(zip(columns,[name,'10','8','2','High-quality','High-quality','95.2','3.4'])) for name in ids])
         module.write_tsv(self.p/'genomad.tsv', ['seq_name','topology','taxonomy'], [dict(seq_name='contig_1',topology='Provirus',taxonomy='Viruses;Caudoviricetes'),dict(seq_name='contig_2',topology='DTR',taxonomy='Unclassified')])
         module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv',self.p/'checkv.tsv',self.p/'genomad.tsv',self.p/'enriched_summary.tsv')
         rows=read_tsv(self.p/'enriched.tsv')
         self.assertEqual([row['geNomad provirus'] for row in rows], ['Yes','No'])
         self.assertEqual(rows[0]['CheckV completeness'], '95.2')
+        self.assertEqual(rows[0]['CheckV contamination'], '3.4')
+        fields = list(rows[0])
+        self.assertEqual(fields[fields.index('CheckV completeness') + 1], 'CheckV contamination')
+        self.assertNotIn('CheckV completeness_method', fields)
         self.assertEqual(rows[0]['CheckV gene count'], '10')
         self.assertEqual(rows[0]['geNomad taxonomy'], 'Viruses;Caudoviricetes')
         self.concatenate_reports([('sample_with_underscores',self.p/'enriched.tsv',self.p/'enriched_summary.tsv')],self.p/'enriched_global')
