@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ROOT=Path(__file__).resolve().parents[1]
-SOURCE=(ROOT/'workflow/rules/02_assembly.smk').read_text()
+SOURCE='\n'.join(path.read_text() for path in sorted((ROOT/'workflow/rules').glob('*.smk')))
 
 
 class AutocyclerTests(unittest.TestCase):

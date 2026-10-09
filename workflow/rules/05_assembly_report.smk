@@ -51,8 +51,8 @@ rule mapped_assembly_info:
         corrected=rules.select_viral_assembly.output.corrected,
         concatemer=rules.select_viral_assembly.output.concatemer_report,
         flye_info=rules.select_viral_assembly.output.flye_info,
-        bam=rule.thebigbam_mapping.output.bam,
-        filtered_bam=rule.thebigbam_mapping_without_bacteria.output.bam,
+        bam=rules.thebigbam_mapping.output.bam,
+        filtered_bam=rules.thebigbam_mapping_without_bacteria.output.bam,
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_info.log")
     shell:

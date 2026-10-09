@@ -96,7 +96,17 @@ checkpoint candidate_viral_quality:
 
 # Publish one selected set of contigs for every downstream analysis.
 rule select_viral_assembly:
-    input: unpack(selected_candidate_inputs)
+    input:
+        corrected=lambda wc: selected_candidate_inputs(wc)["corrected"],
+        concatemer_report=lambda wc: selected_candidate_inputs(wc)["concatemer_report"],
+        dtr_report=lambda wc: selected_candidate_inputs(wc)["dtr_report"],
+        checkv_quality=lambda wc: selected_candidate_inputs(wc)["checkv_quality"],
+        fasta=lambda wc: selected_candidate_inputs(wc)["fasta"],
+        summary=lambda wc: selected_candidate_inputs(wc)["summary"],
+        assembly=lambda wc: selected_candidate_inputs(wc)["assembly"],
+        used_reads=lambda wc: selected_candidate_inputs(wc)["used_reads"],
+        filter_report=lambda wc: selected_candidate_inputs(wc)["filter_report"],
+        flye_info=lambda wc: [selected_candidate_inputs(wc)["flye_info"]] if "flye_info" in selected_candidate_inputs(wc) else []
     output:
         corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
         concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
