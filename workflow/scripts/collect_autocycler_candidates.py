@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 
-def collect(candidates, output):
+def collect(candidates, output, allow_insufficient=False):
     output = Path(output)
     assemblies = output / 'assemblies'
     assemblies.mkdir(parents=True, exist_ok=True)
@@ -33,7 +33,7 @@ def collect(candidates, output):
         writer.writeheader()
         writer.writerows(rows)
     successes = sum(row['Status'] == 'success' for row in rows)
-    if successes < 2:
+    if successes < 2 and not allow_insufficient:
         raise ValueError(f'Autocycler requires multiple successful input assemblies; got {successes}')
 
 
@@ -41,8 +41,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--candidates', nargs='+', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--allow-insufficient', action='store_true')
     args = parser.parse_args()
-    collect(args.candidates, args.output)
+    collect(args.candidates, args.output, args.allow_insufficient)
 
 
 if __name__ == '__main__':

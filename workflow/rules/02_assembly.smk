@@ -21,21 +21,27 @@ rule assembly_reads_flye:
     output:
         assembly = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "flye", "assembly.fasta"),
         graph = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "flye", "assembly_graph.gfa"),
-        info = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "flye", "assembly_info.txt")
+        info = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "flye", "assembly_info.txt"),
+        status = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "flye", "assembly_status.txt")
     input: rules.subsample_reads_flye.output.reads
     conda: os.path.join(ENV_DIR, "flye.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_assembly_reads_flye.log")
     threads: 8
     shell:
-        """(date && flye -t {threads} --meta --nano-raw {input} -o $(dirname {output.assembly}) && date) &> {log}"""
+        """python ./scripts/run_assembly_attempt.py --assembly {output.assembly:q} --status {output.status:q} --log {log:q} \
+            --extra-output {output.graph:q} --extra-output {output.info:q} -- \
+            flye -t {threads} --meta --nano-raw {input:q} -o $(dirname {output.assembly:q})"""
 
 # Single-end short-read assembly, selected automatically when long reads are absent.
 rule assembly_reads_spades:
-    output: assembly=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "spades", "assembly.fasta")
+    output:
+        assembly=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "spades", "assembly.fasta"),
+        status=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "spades", "assembly_status.txt")
     input: assembly_reads
     conda: os.path.join(ENV_DIR, "spades.yaml")
     threads: 8
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_spades.log")
     shell:
-        """(spades.py -s {input:q} --isolate -t {threads} -o $(dirname {output.assembly:q}) && \
-            cp $(dirname {output.assembly:q})/contigs.fasta {output.assembly:q}) > {log:q} 2>&1"""
+        """python ./scripts/run_assembly_attempt.py --assembly {output.assembly:q} --status {output.status:q} --log {log:q} -- \
+            bash -euo pipefail -c 'spades.py -s "$1" --isolate -t "$2" -o "$3" && cp "$3/contigs.fasta" "$4"' \
+            -- {input:q} {threads} $(dirname {output.assembly:q}) {output.assembly:q}"""

@@ -64,6 +64,7 @@ rule viral_report:
         fasta=rules.select_viral_assembly.output.corrected,
         assembly_info=rules.mapped_assembly_info.output,
         assembler=rules.select_viral_assembly.output.assembler,
+        status=rules.select_viral_assembly.output.status,
         read_stats=rules.select_viral_assembly.output.read_stats,
         concatemer=rules.select_viral_assembly.output.concatemer_report,
         dtr=rules.select_viral_assembly.output.dtr_report,
@@ -74,7 +75,7 @@ rule viral_report:
         summary=os.path.join(RESULTS_DIR, "{sample}", "viral_sample_report.tsv")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_report.log")
     shell:
-        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --read-stats {input.read_stats:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
+        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
 
 # Concatenate per-sample reports before selecting samples for annotation.
 checkpoint viral_report_global:

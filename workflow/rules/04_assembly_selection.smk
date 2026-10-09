@@ -14,7 +14,18 @@ rule genomad_candidate:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_genomad.log")
     message: "Running geNomad"
     shell:
-        "(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.assembly} $(dirname $(dirname {output.fasta})) $(dirname {input.db}) && date) &> {log}"
+        """
+        (
+            if grep -q '^>' {input.assembly:q}; then
+                genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.assembly:q} $(dirname $(dirname {output.fasta:q})) $(dirname {input.db:q})
+            else
+                echo "Empty or failed assembly; skipping geNomad."
+                mkdir -p $(dirname {output.fasta:q})
+                : > {output.fasta:q}
+                printf 'seq_name\ttopology\ttaxonomy\n' > {output.summary:q}
+            fi
+        ) > {log:q} 2>&1
+        """
 
 # keeping viral contigs longer than 2 kbp
 rule keep_long_viral_contigs_candidate:
@@ -89,10 +100,14 @@ rule checkv_candidate:
 
 # Each quality checkpoint lets selection inspect a completed candidate.
 checkpoint candidate_viral_quality:
-    input: rules.checkv_candidate.output.checkv_quality
-    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "validated_quality.tsv")
+    input:
+        quality=rules.checkv_candidate.output.checkv_quality,
+        status=lambda wc: os.path.join(os.path.dirname(candidate_assembly(wc)), "assembly_status.txt")
+    output:
+        quality=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "validated_quality.tsv"),
+        status=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "validated_assembly_status.txt")
     wildcard_constraints: assembler="flye|spades|autocycler"
-    shell: "cp {input:q} {output:q}"
+    shell: "cp {input.quality:q} {output.quality:q}; cp {input.status:q} {output.status:q}"
 
 # Publish one selected set of contigs for every downstream analysis.
 rule select_viral_assembly:
@@ -104,6 +119,7 @@ rule select_viral_assembly:
         fasta=lambda wc: selected_candidate_inputs(wc)["fasta"],
         summary=lambda wc: selected_candidate_inputs(wc)["summary"],
         assembly=lambda wc: selected_candidate_inputs(wc)["assembly"],
+        status=lambda wc: selected_candidate_inputs(wc)["status"],
         used_reads=lambda wc: selected_candidate_inputs(wc)["used_reads"],
         filter_report=lambda wc: selected_candidate_inputs(wc)["filter_report"],
         flye_info=lambda wc: [selected_candidate_inputs(wc)["flye_info"]] if "flye_info" in selected_candidate_inputs(wc) else []
@@ -117,6 +133,7 @@ rule select_viral_assembly:
         assembly=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly.fasta"),
         flye_info=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "flye_info.tsv"),
         assembler=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembler.txt"),
+        status=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly_status.txt"),
         read_stats=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "read_stats.tsv")
     shell:
         """
@@ -127,6 +144,7 @@ rule select_viral_assembly:
         cp {input.fasta:q} {output.fasta:q}
         cp {input.summary:q} {output.summary:q}
         cp {input.assembly:q} {output.assembly:q}
+        cp {input.status:q} {output.status:q}
         if [ "$(basename "$(dirname "$(dirname {input.corrected:q})")")" = flye ]; then
             cp "$(dirname {input.assembly:q})/assembly_info.txt" {output.flye_info:q}
         else

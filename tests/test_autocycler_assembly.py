@@ -31,12 +31,15 @@ if step=='combine':
     (Path(args[args.index('-a')+1])/'consensus_assembly.fasta').write_text('>consensus\nACGT\n')
 """)
             executable.chmod(0o755)
+            (p/'candidates/assemblies').mkdir(parents=True)
+            for name in ['a','b']: (p/'candidates/assemblies'/f'{name}.fasta').write_text('>c\nACGT\n')
             command=SOURCE.split('rule assembly_reads_autocycler:')[1].split('"""')[1]
+            command=command.replace('./scripts/',str(ROOT/'workflow/scripts')+'/')
             quote=lambda value: shlex.quote(str(value))
             command=command.replace(':q}', '}').format(
                 params=SimpleNamespace(work=quote(p/'work')),
                 input=SimpleNamespace(reads=quote(p/'reads.fastq'),candidates=quote(p/'candidates')),
-                output=quote(p/'assembly.fa'),log=quote(p/'run.log'),threads=2)
+                output=SimpleNamespace(assembly=quote(p/'assembly.fa'),status=quote(p/'status')),log=quote(p/'run.log'),threads=2)
             env=dict(os.environ,PATH=str(p)+os.pathsep+os.environ['PATH'],CALLS=str(p/'calls'))
             subprocess.run(['bash','-euo','pipefail','-c',command],env=env,check=True)
             self.assertEqual((p/'calls').read_text().splitlines(),['compress','cluster','trim','resolve','combine'])
@@ -44,8 +47,9 @@ if step=='combine':
             (p/'assembly.fa').unlink()
             env['FAIL_QC']='1'
             result=subprocess.run(['bash','-euo','pipefail','-c',command],env=env)
-            self.assertNotEqual(result.returncode,0)
-            self.assertFalse((p/'assembly.fa').exists())
+            self.assertEqual(result.returncode,0)
+            self.assertEqual((p/'status').read_text().strip(),'failed')
+            self.assertEqual((p/'assembly.fa').read_text(),'')
 
     def test_candidate_failures_keep_successful_assemblies(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -86,5 +90,7 @@ Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
             collect(jobs,p/'candidates')
             self.assertEqual(len(list((p/'candidates/assemblies').glob('*.fasta'))),7)
             self.assertIn('failed',(p/'candidates/candidate_status.tsv').read_text())
+            collect([jobs[1]],p/'empty_candidates',allow_insufficient=True)
+            self.assertEqual(list((p/'empty_candidates/assemblies').glob('*.fasta')),[])
             with self.assertRaisesRegex(ValueError,'multiple successful'):
                 collect([jobs[1]],p/'too_few')

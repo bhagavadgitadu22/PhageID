@@ -47,7 +47,7 @@ def fasta_lengths(path):
     return lengths
 
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None):
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None, assembly_status="success"):
     read_fields = ['Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number']
     read_values = dict.fromkeys(read_fields, 'NA')
     if read_stats:
@@ -95,14 +95,18 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         add_quality_metadata(rows, sample, checkv, genomad)
     write_tsv(output, CONTIG_FIELDS, rows)
     if summary_output is not None:
-        write_tsv(summary_output, SAMPLE_FIELDS, [sample_summary(sample, rows)])
+        write_tsv(summary_output, SAMPLE_FIELDS, [sample_summary(sample, rows, assembly_status)])
 
 
-def sample_summary(sample, rows):
+def sample_summary(sample, rows, assembly_status="success"):
+    if assembly_status not in {"success", "failed"}:
+        raise ValueError(f'Invalid assembly status: {assembly_status}')
+    if assembly_status == "failed" and rows:
+        raise ValueError('Failed assembly cannot have viral contigs')
     return dict(zip(SAMPLE_FIELDS, [
         sample, len(rows), sum(int(row['Total bp']) for row in rows),
         sum(int(row['Total corrected bp']) for row in rows),
-        'ready' if rows else 'no_viral_contigs',
+        'ready' if rows else 'assembly_failed' if assembly_status == 'failed' else 'no_viral_contigs',
     ]))
 
 
@@ -140,9 +144,11 @@ def main():
     parser.add_argument("--assembly-info", "--flye-info", dest="flye_info", required=True)
     parser.add_argument("--assembler", required=True)
     parser.add_argument("--read-stats", required=True)
+    parser.add_argument("--assembly-status", required=True)
     args = parser.parse_args()
+    assembly_status = Path(args.assembly_status).read_text().strip()
     sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
-                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats)
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats, assembly_status)
 
 
 if __name__ == '__main__':

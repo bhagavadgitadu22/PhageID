@@ -54,6 +54,12 @@ class ViralReportTests(unittest.TestCase):
     def report(self):
         module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv', summary_output=self.p/'summary.tsv')
 
+    def test_failed_assembly_summary(self):
+        row = module.sample_summary('failed', [], 'failed')
+        self.assertEqual(row['Status'], 'assembly_failed')
+        self.assertEqual(row['Viral contigs'], 0)
+        self.assertEqual(module.sample_summary('empty', [])['Status'], 'no_viral_contigs')
+
     def test_metadata_original_and_corrected_lengths(self):
         self.report()
         rows=read_tsv(self.p/'stats.tsv')

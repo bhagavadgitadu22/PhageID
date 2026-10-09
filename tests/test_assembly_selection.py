@@ -28,7 +28,7 @@ class AssemblySelectionTests(unittest.TestCase):
             def status(**kwargs):
                 return SimpleNamespace(output=[str(filter_report)])
             def quality(sample, readset, assembler):
-                return SimpleNamespace(output=[str(p / f'{readset}_{assembler}.tsv')])
+                return SimpleNamespace(output=SimpleNamespace(quality=str(p / f'{readset}_{assembler}.tsv'), status=str(p / f'{readset}_{assembler}.status')))
             namespace = dict(os=os, RESULTS_DIR=folder, READ_FILES={'long': '/reads', 'short': ''},
                 HOSTS_LIST={'long': '/host', 'short': '/host'}, rules=rules,
                 sample_reads=lambda wc: f'{wc.sample}/all.fastq',
@@ -55,12 +55,20 @@ class AssemblySelectionTests(unittest.TestCase):
                 ('short', 'Medium-quality', None, 'Low-quality', None, 5, 'filtered', 'spades'),
                 ('short', 'Medium-quality', None, 'Medium-quality', None, 5, 'filtered', 'spades'),
                 ('short', 'Not-determined', None, None, None, 5, 'filtered', 'spades'),
-                ('long', ['Low-quality', 'High-quality'], None, None, None, 5, 'filtered', 'flye')]
+                ('long', ['Low-quality', 'High-quality'], None, None, None, 5, 'filtered', 'flye'),
+                ('long', 'FAILED', 'High-quality', None, None, 5, 'filtered', 'autocycler'),
+                ('long', 'FAILED', 'FAILED', 'High-quality', None, 5, 'all', 'flye'),
+                ('long', 'FAILED', 'FAILED', 'FAILED', 'FAILED', 5, 'filtered', 'flye'),
+                ('long', 'FAILED', None, 'FAILED', 'FAILED', 5, 'filtered', 'autocycler'),
+                ('short', 'FAILED', None, 'High-quality', None, 5, 'all', 'spades'),
+                ('short', 'FAILED', None, 'FAILED', None, 5, 'filtered', 'spades')]
             for sample, primary, autocycler, full_primary, full_auto, filtered_count, readset, assembler in cases:
                 filter_report.write_text(f'All reads number\tBacterial free reads\n10\t{filtered_count}\n')
                 primary_assembler = 'flye' if sample == 'long' else 'spades'
                 for name, category in [(f'filtered_{primary_assembler}', primary), ('filtered_autocycler', autocycler),
                                        (f'all_{primary_assembler}', full_primary), ('all_autocycler', full_auto)]:
+                    (p / f'{name}.status').write_text('failed' if category == 'FAILED' else 'success')
+                    if category == 'FAILED': category = None
                     (p / f'{name}.tsv').write_text('contig_id\tcheckv_quality\n'+(''.join(f'c{i}\t{value}\n' for i, value in enumerate(category if isinstance(category, list) else [category])) if category else ''))
                 with self.subTest(sample=sample, primary=primary, full=full_primary, filtered_count=filtered_count):
                     selected = namespace['selected_candidate_inputs'](SimpleNamespace(sample=sample))

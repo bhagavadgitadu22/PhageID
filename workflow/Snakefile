@@ -68,8 +68,14 @@ def candidate_choice(sample, readset):
     import csv
     primary = "flye" if READ_FILES[sample] else "spades"
     def quality(assembler):
-        path = checkpoints.candidate_viral_quality.get(sample=sample, readset=readset, assembler=assembler).output[0]
-        with open(path) as handle:
+        candidate = checkpoints.candidate_viral_quality.get(sample=sample, readset=readset, assembler=assembler).output
+        with open(candidate.status) as handle:
+            status = handle.read().strip()
+        if status == "failed":
+            return -1
+        if status != "success":
+            raise ValueError(f"Invalid assembly status: {status}")
+        with open(candidate.quality) as handle:
             return max((CHECKV_QUALITY_RANK.get(row["checkv_quality"], 1)
                         for row in csv.DictReader(handle, delimiter="\t")), default=0)
     primary_quality = quality(primary)
@@ -95,6 +101,7 @@ def selected_candidate_inputs(wc):
     values = dict(rules.fix_circular_viral_contigs_per_sample_candidate.output.items())
     values.update(dict(rules.genomad_candidate.output.items()))
     values.update(dict(rules.checkv_candidate.output.items()))
+    values["status"] = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "assembly_status.txt")
     values["assembly"] = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "assembly.fasta")
     if assembler == "flye":
         values["flye_info"] = rules.assembly_reads_flye.output.info
