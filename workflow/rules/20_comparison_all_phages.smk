@@ -39,7 +39,7 @@ rule lovis4u_genotate:
         lovis4u -gff $(dirname {output})/gff_input --reorient_loci --use-filename-as-id --homology-links --run-hmmscan -o $(dirname {output}) && 
         date) &> {log}"""
 
-# One annotation/assembly file per sample defines one MAG in the first database.
+# One annotation/assembly file per sample defines one "viral MAG" in the first database.
 rule thebigbam_annotations:
     output: directory(os.path.join(RESULTS_DIR, "thebigbam", "mag_inputs"))
     input:

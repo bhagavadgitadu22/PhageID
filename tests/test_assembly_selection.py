@@ -42,16 +42,26 @@ class AssemblySelectionTests(unittest.TestCase):
                 ('long', 'Low-quality', None, None, None, 5, 'filtered', 'flye'),
                 ('long', None, None, 'High-quality', None, 5, 'all', 'flye'),
                 ('long', None, None, 'Low-quality', 'High-quality', 5, 'all', 'autocycler'),
-                ('long', None, None, None, None, 5, 'all', 'flye'),
+                ('long', None, None, None, None, 5, 'filtered', 'flye'),
                 ('long', None, None, 'High-quality', None, 0, 'all', 'flye'),
                 ('short', 'Low-quality', None, None, None, 5, 'filtered', 'spades'),
-                ('short', None, None, 'Low-quality', None, 5, 'all', 'spades')]
+                ('short', None, None, 'Low-quality', None, 5, 'all', 'spades'),
+                ('long', 'Low-quality', 'Medium-quality', 'High-quality', None, 5, 'all', 'flye'),
+                ('long', 'Medium-quality', 'Low-quality', 'Low-quality', 'Low-quality', 5, 'filtered', 'flye'),
+                ('long', 'Low-quality', 'Medium-quality', 'Low-quality', 'Low-quality', 5, 'filtered', 'autocycler'),
+                ('long', 'Medium-quality', 'Medium-quality', 'Medium-quality', 'Medium-quality', 5, 'filtered', 'flye'),
+                ('long', 'Low-quality', 'Low-quality', 'Medium-quality', 'Complete', 5, 'all', 'autocycler'),
+                ('short', 'Low-quality', None, 'High-quality', None, 5, 'all', 'spades'),
+                ('short', 'Medium-quality', None, 'Low-quality', None, 5, 'filtered', 'spades'),
+                ('short', 'Medium-quality', None, 'Medium-quality', None, 5, 'filtered', 'spades'),
+                ('short', 'Not-determined', None, None, None, 5, 'filtered', 'spades'),
+                ('long', ['Low-quality', 'High-quality'], None, None, None, 5, 'filtered', 'flye')]
             for sample, primary, autocycler, full_primary, full_auto, filtered_count, readset, assembler in cases:
                 filter_report.write_text(f'All reads number\tBacterial free reads\n10\t{filtered_count}\n')
                 primary_assembler = 'flye' if sample == 'long' else 'spades'
                 for name, category in [(f'filtered_{primary_assembler}', primary), ('filtered_autocycler', autocycler),
                                        (f'all_{primary_assembler}', full_primary), ('all_autocycler', full_auto)]:
-                    (p / f'{name}.tsv').write_text('contig_id\tcheckv_quality\n'+(f'c\t{category}\n' if category else ''))
+                    (p / f'{name}.tsv').write_text('contig_id\tcheckv_quality\n'+(''.join(f'c{i}\t{value}\n' for i, value in enumerate(category if isinstance(category, list) else [category])) if category else ''))
                 with self.subTest(sample=sample, primary=primary, full=full_primary, filtered_count=filtered_count):
                     selected = namespace['selected_candidate_inputs'](SimpleNamespace(sample=sample))
                     self.assertEqual(selected['corrected'], f'{sample}/{readset}/{assembler}/corrected.fa')

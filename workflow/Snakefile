@@ -60,21 +60,26 @@ def candidate_assembly(wc):
         raise ValueError(f"{wc.assembler} requires long reads for {wc.sample}")
     return os.path.join(RESULTS_DIR, wc.sample, "assembly_attempts", wc.readset, wc.assembler, "assembly.fasta")
 
+# Rank by the highest CheckV category among each assembly's retained viral contigs.
+CHECKV_QUALITY_RANK = {"Not-determined": 1, "Low-quality": 2, "Medium-quality": 3,
+                      "High-quality": 4, "Complete": 5}
+
 def candidate_choice(sample, readset):
     import csv
     primary = "flye" if READ_FILES[sample] else "spades"
     def quality(assembler):
         path = checkpoints.candidate_viral_quality.get(sample=sample, readset=readset, assembler=assembler).output[0]
         with open(path) as handle:
-            return list(csv.DictReader(handle, delimiter="\t"))
-    primary_rows = quality(primary)
-    if primary == "spades" or any(row["checkv_quality"] in {"Complete", "High-quality"} for row in primary_rows):
-        return primary, bool(primary_rows)
-    autocycler_rows = quality("autocycler")
-    # Keep Flye contigs if Autocycler finds none, so an empty rescue cannot erase them.
-    if autocycler_rows:
-        return "autocycler", True
-    return primary, bool(primary_rows)
+            return max((CHECKV_QUALITY_RANK.get(row["checkv_quality"], 1)
+                        for row in csv.DictReader(handle, delimiter="\t")), default=0)
+    primary_quality = quality(primary)
+    if primary == "spades" or primary_quality >= CHECKV_QUALITY_RANK["High-quality"]:
+        return primary, primary_quality
+    autocycler_quality = quality("autocycler")
+    # Prefer the earlier attempt when the best categories are equal.
+    if autocycler_quality > primary_quality:
+        return "autocycler", autocycler_quality
+    return primary, primary_quality
 
 def selected_candidate_inputs(wc):
     import csv
@@ -82,10 +87,11 @@ def selected_candidate_inputs(wc):
     with open(filter_report) as handle:
         stats = next(csv.DictReader(handle, delimiter="\t"))
     readset = "filtered" if HOSTS_LIST[wc.sample] and int(stats["Bacterial free reads"]) > 0 else "all"
-    assembler, found = candidate_choice(wc.sample, readset)
-    if readset == "filtered" and not found:
-        readset = "all"
-        assembler, found = candidate_choice(wc.sample, readset)
+    assembler, best_quality = candidate_choice(wc.sample, readset)
+    if readset == "filtered" and best_quality < CHECKV_QUALITY_RANK["High-quality"]:
+        all_assembler, all_quality = candidate_choice(wc.sample, "all")
+        if all_quality > best_quality:
+            readset, assembler = "all", all_assembler
     values = dict(rules.fix_circular_viral_contigs_per_sample_candidate.output.items())
     values.update(dict(rules.genomad_candidate.output.items()))
     values.update(dict(rules.checkv_candidate.output.items()))
