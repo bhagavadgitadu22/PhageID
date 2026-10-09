@@ -62,12 +62,24 @@ if args[1]=='flye': sys.exit(1)
 Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
 """)
             executable.chmod(0o755)
-            command=SOURCE.split('rule autocycler_candidate_assemblies:')[1].split('"""')[1]
+            command=SOURCE.split('rule autocycler_candidate_assembly:')[1].split('"""')[1]
             quote=lambda value: shlex.quote(str(value))
-            command=command.replace(':q}', '}').format(
-                input=SimpleNamespace(subsets=quote(subsets),genome_size=quote(p/'size')),
-                output=quote(p/'candidates'),params=SimpleNamespace(read_type='ont_r10'),threads=2,log=quote(p/'run.log'))
             env=dict(os.environ,PATH=str(p)+os.pathsep+os.environ['PATH'])
-            subprocess.run(['bash','-euo','pipefail','-c',command],env=env,check=True)
+            jobs=[]
+            for assembler in ['canu','flye','metamdbg','miniasm','necat','nextdenovo','plassembler','raven']:
+                output=p/'jobs'/assembler/'sample_01'
+                jobs.append(output)
+                rendered=command.replace(':q}', '}').format(
+                    input=SimpleNamespace(genome_size=quote(p/'size')),
+                    output=quote(output),params=SimpleNamespace(read_type='ont_r10',reads=quote(subsets/'sample_01.fastq')),
+                    wildcards=SimpleNamespace(candidate_assembler=assembler),threads=2,log=quote(p/f'{assembler}.log'))
+                subprocess.run(['bash','-euo','pipefail','-c',rendered],env=env,check=True,capture_output=True)
+                self.assertEqual((output/'status.txt').read_text().strip(),'failed' if assembler=='flye' else 'success')
+            import sys
+            sys.path.insert(0,str(ROOT/'workflow/scripts'))
+            from collect_autocycler_candidates import collect
+            collect(jobs,p/'candidates')
             self.assertEqual(len(list((p/'candidates/assemblies').glob('*.fasta'))),7)
-            self.assertIn('Assembly failed: flye',(p/'run.log').read_text())
+            self.assertIn('failed',(p/'candidates/candidate_status.tsv').read_text())
+            with self.assertRaisesRegex(ValueError,'multiple successful'):
+                collect([jobs[1]],p/'too_few')

@@ -6,12 +6,12 @@ dependencies:
   - autocycler=0.7.0
   - flye=2.9.6
   - raven-assembler=1.8.3
-  - miniasm
-  - minipolish
-  - minimap2
-  - racon
-  - canu
-  - metamdbg
-  - necat
-  - nextdenovo
-  - plassembler
+  - miniasm=0.3
+  - minipolish=0.2.1
+  - minimap2=2.31
+  - racon=1.5.0
+  - canu=2.3
+  - metamdbg=1.4
+  - necat=0.0.1_update20200803
+  - nextdenovo=2.5.2
+  - plassembler=1.8.5

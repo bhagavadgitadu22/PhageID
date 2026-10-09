@@ -1,7 +1,8 @@
 import os
 
 wildcard_constraints:
-    sample="[^/]+"
+    sample="[^/]+",
+    readset="filtered|all"
 
 ### Configuration
 configfile: os.getcwd()+"/../config/config.yaml"
@@ -46,32 +47,56 @@ def read_input_files(path):
 
 def sample_reads(wildcards):
     pattern = (rules.preprocess_reads_porechop.output[0] if READ_FILES[wildcards.sample]
-               else rules.prepare_short_reads.output[0])
+               else rules.preprocess_reads_fastp.output.reads)
     return pattern.format(sample=wildcards.sample)
+
+def assembly_reads(wc):
+    if wc.readset == "filtered":
+        return rules.remove_bacterial_contamination.output[0].format(sample=wc.sample)
+    return sample_reads(wc)
 
 def candidate_assembly(wc):
     if wc.assembler in {"flye", "autocycler"} and not READ_FILES[wc.sample]:
         raise ValueError(f"{wc.assembler} requires long reads for {wc.sample}")
-    return os.path.join(RESULTS_DIR, wc.sample, wc.assembler, "assembly.fasta")
+    return os.path.join(RESULTS_DIR, wc.sample, "assembly_attempts", wc.readset, wc.assembler, "assembly.fasta")
 
-def primary_quality(wc):
-    assembler = "flye" if READ_FILES[wc.sample] else "spades"
-    return rules.checkv_candidate.output.checkv_quality.format(sample=wc.sample, assembler=assembler)
+def candidate_choice(sample, readset):
+    import csv
+    primary = "flye" if READ_FILES[sample] else "spades"
+    def quality(assembler):
+        path = checkpoints.candidate_viral_quality.get(sample=sample, readset=readset, assembler=assembler).output[0]
+        with open(path) as handle:
+            return list(csv.DictReader(handle, delimiter="\t"))
+    primary_rows = quality(primary)
+    if primary == "spades" or any(row["checkv_quality"] in {"Complete", "High-quality"} for row in primary_rows):
+        return primary, bool(primary_rows)
+    autocycler_rows = quality("autocycler")
+    # Keep Flye contigs if Autocycler finds none, so an empty rescue cannot erase them.
+    if autocycler_rows:
+        return "autocycler", True
+    return primary, bool(primary_rows)
 
 def selected_candidate_inputs(wc):
     import csv
-    quality = checkpoints.primary_viral_quality.get(sample=wc.sample).output[0]
-    with open(quality) as handle:
-        high_quality = any(row["checkv_quality"] in {"Complete", "High-quality"}
-                           for row in csv.DictReader(handle, delimiter="\t"))
-    assembler = ("flye" if high_quality else "autocycler") if READ_FILES[wc.sample] else "spades"
+    filter_report = checkpoints.assembly_read_status.get(sample=wc.sample).output[0]
+    with open(filter_report) as handle:
+        stats = next(csv.DictReader(handle, delimiter="\t"))
+    readset = "filtered" if HOSTS_LIST[wc.sample] and int(stats["Bacterial free reads"]) > 0 else "all"
+    assembler, found = candidate_choice(wc.sample, readset)
+    if readset == "filtered" and not found:
+        readset = "all"
+        assembler, found = candidate_choice(wc.sample, readset)
     values = dict(rules.fix_circular_viral_contigs_per_sample_candidate.output.items())
     values.update(dict(rules.genomad_candidate.output.items()))
     values.update(dict(rules.checkv_candidate.output.items()))
-    values["assembly"] = os.path.join(RESULTS_DIR, "{sample}", "{assembler}", "assembly.fasta")
+    values["assembly"] = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "assembly.fasta")
     if assembler == "flye":
         values["flye_info"] = rules.assembly_reads_flye.output.info
-    return {name: str(path).format(sample=wc.sample, assembler=assembler) for name, path in values.items()}
+        values["used_reads"] = rules.subsample_reads_flye.output.reads
+    else:
+        values["used_reads"] = (rules.remove_bacterial_contamination.output[0] if readset == "filtered" else sample_reads(wc))
+    values["filter_report"] = filter_report
+    return {name: str(path).format(sample=wc.sample, assembler=assembler, readset=readset) for name, path in values.items()}
 
 def sample_mapper(wildcards):
     return "minimap2-ont" if READ_FILES[wildcards.sample] else "minimap2-sr-secondary"

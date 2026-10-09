@@ -4,7 +4,7 @@ import argparse
 import csv
 from pathlib import Path
 
-CONTIG_FIELDS = ['Viral contig', 'Sample', 'Assembler', 'Total bp', 'Total corrected bp', 'Coverage', 'Coverage without bacteria', 'Flye circularity',
+CONTIG_FIELDS = ['Viral contig', 'Sample', 'Assembler', 'Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number', 'Total bp', 'Total corrected bp', 'Coverage', 'Coverage without bacteria', 'Flye circularity',
                  'Number of concatemers broken', 'DTR length removed']
 ANNOTATION_FIELDS = ['CheckV gene count', 'CheckV viral genes', 'CheckV host genes',
                      'CheckV quality', 'MIUVIG quality', 'CheckV completeness', 'CheckV contamination',
@@ -47,7 +47,12 @@ def fasta_lengths(path):
     return lengths
 
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye"):
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None):
+    read_fields = ['Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number']
+    read_values = dict.fromkeys(read_fields, 'NA')
+    if read_stats:
+        with open(read_stats) as handle:
+            read_values = next(csv.DictReader(handle, delimiter='\t'))
     lengths = fasta_lengths(fasta)
     ids = set(lengths)
     concatemers = read_corrections(concatemer_report)
@@ -80,7 +85,7 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         float(metadata[2])  # Reject missing/malformed coverage rather than inventing a value.
         float(metadata[3])
         rows.append(dict(zip(CONTIG_FIELDS, [
-            contig, sample, assembler, original_length, corrected_length, metadata[2], metadata[3], circular,
+            contig, sample, assembler, *[read_values[field] for field in read_fields], original_length, corrected_length, metadata[2], metadata[3], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
             int(dtr['original_length']) - int(dtr['corrected_length']),
         ])))
@@ -134,9 +139,10 @@ def main():
         parser.add_argument('--' + name, required=True)
     parser.add_argument("--assembly-info", "--flye-info", dest="flye_info", required=True)
     parser.add_argument("--assembler", required=True)
+    parser.add_argument("--read-stats", required=True)
     args = parser.parse_args()
     sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
-                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler)
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats)
 
 
 if __name__ == '__main__':

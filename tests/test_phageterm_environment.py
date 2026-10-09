@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 class PhageTermEnvironmentTests(unittest.TestCase):
     def test_prepared_executable_and_absolute_inputs_after_chdir(self):
-        source=(ROOT/'workflow/rules/03_phageterm.smk').read_text().split('rule phageterm:')[1]
+        source=(ROOT/'workflow/rules/14_phageterm.smk').read_text().split('rule phageterm:')[1]
         command=re.search(r'"""(.*?)"""',source,re.S).group(1)
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

@@ -39,7 +39,7 @@ class ViralReportTests(unittest.TestCase):
     def concatenate_reports(self, reports, output_dir):
         import shlex
         import subprocess
-        source=(ROOT/'workflow/rules/02_assembly.smk').read_text()
+        source=(ROOT/'workflow/rules/03_assembly_selection.smk').read_text()
         command=source.split('checkpoint viral_report_global:')[1].split('"""')[1]
         quote=lambda value: shlex.quote(str(value))
         command=command.replace(':q}', '}').format(
@@ -149,7 +149,7 @@ class ViralReportTests(unittest.TestCase):
 
     def test_checkv_skips_empty_fasta(self):
         import subprocess
-        source=(ROOT/'workflow/rules/02_assembly.smk').read_text()
+        source=(ROOT/'workflow/rules/03_assembly_selection.smk').read_text()
         command=source.split('rule checkv_candidate:')[1].split('"""')[1]
         (self.p/'empty.fa').write_text('')
         output=self.p/'checkv/quality_summary.tsv'

@@ -21,7 +21,7 @@ class OptionalHostTests(unittest.TestCase):
             self.assertEqual(len(namespace['READ_FILES']), 6)
 
     def test_missing_host_preserves_reads_and_logs_skip(self):
-        source = (ROOT / 'workflow/rules/08_comparison_all_phages.smk').read_text()
+        source = (ROOT / 'workflow/rules/01_preprocessing_reads.smk').read_text()
         source = source[source.index('rule remove_bacterial_contamination:'):]
         command = source.split('"""')[1]
         with tempfile.TemporaryDirectory() as directory:

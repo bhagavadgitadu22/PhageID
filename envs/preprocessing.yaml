@@ -5,3 +5,4 @@ channels:
 dependencies:
  - porechop=0.2.4
  - seqtk=1.5
+ - fastp=0.23.4
