@@ -4,7 +4,7 @@ import argparse
 import csv
 from pathlib import Path
 
-CONTIG_FIELDS = ['Viral contig', 'Sample', 'Total bp', 'Total corrected bp', 'Coverage', 'Circular',
+CONTIG_FIELDS = ['Viral contig', 'Sample', 'Assembler', 'Total bp', 'Total corrected bp', 'Coverage', 'Coverage without bacteria', 'Flye circularity',
                  'Number of concatemers broken', 'DTR length removed']
 ANNOTATION_FIELDS = ['CheckV gene count', 'CheckV viral genes', 'CheckV host genes',
                      'CheckV quality', 'MIUVIG quality', 'CheckV completeness', 'CheckV contamination',
@@ -47,7 +47,7 @@ def fasta_lengths(path):
     return lengths
 
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None):
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye"):
     lengths = fasta_lengths(fasta)
     ids = set(lengths)
     concatemers = read_corrections(concatemer_report)
@@ -60,36 +60,27 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
             if not line.strip() or line.startswith('#'):
                 continue
             fields = line.rstrip('\n').split('\t')
-            if len(fields) < 4 or fields[0] in flye:
-                raise ValueError(f'Invalid or duplicate Flye metadata in {flye_info}')
+            if len(fields) < 5 or fields[0] in flye:
+                raise ValueError(f'Invalid or duplicate assembly metadata in {flye_info}')
             flye[fields[0]] = fields
     rows = []
-    prefix = sample + '_'
     for contig, corrected_length in lengths.items():
-        # rename_contigs prefixes the original Flye ID with the full sample ID.
-        original_id = contig[len(prefix):] if contig.startswith(prefix) else ''
-        flye_id, separator, region = original_id.partition('|provirus_')
-        if flye_id not in flye:
-            raise ValueError(f'No Flye metadata for {contig}')
-        metadata = flye[flye_id]
+        if contig not in flye:
+            raise ValueError(f'No assembly metadata for {contig}')
+        metadata = flye[contig]
         original_length = int(metadata[1])
-        circular = metadata[3]
-        if separator:
-            start, end = map(int, region.split('_'))
-            if not 1 <= start <= end <= original_length:
-                raise ValueError(f'Invalid provirus coordinates for {contig}')
-            original_length = end - start + 1
-            circular = 'N'
+        circular = metadata[4]
         concatemer, dtr = concatemers[contig], dtrs[contig]
         if int(dtr['original_length']) != int(concatemer['corrected_length']) or int(dtr['corrected_length']) != corrected_length:
             raise ValueError(f'Correction lengths do not match for {contig}')
         if int(concatemer['original_length']) != original_length:
-            raise ValueError(f'Flye and correction lengths do not match for {contig}')
-        if metadata[3] not in {'Y', 'N'}:
-            raise ValueError(f'Invalid Flye circularity for {contig}')
+            raise ValueError(f'Assembly and correction lengths do not match for {contig}')
+        if metadata[4] not in {'Y', 'N', 'NA'}:
+            raise ValueError(f'Invalid assembly circularity for {contig}')
         float(metadata[2])  # Reject missing/malformed coverage rather than inventing a value.
+        float(metadata[3])
         rows.append(dict(zip(CONTIG_FIELDS, [
-            contig, sample, original_length, corrected_length, metadata[2], circular,
+            contig, sample, assembler, original_length, corrected_length, metadata[2], metadata[3], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
             int(dtr['original_length']) - int(dtr['corrected_length']),
         ])))
@@ -138,12 +129,14 @@ def add_quality_metadata(rows, sample, checkv, genomad):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ['sample', 'fasta', 'flye-info', 'concatemer-report', 'dtr-report',
+    for name in ['sample', 'fasta', 'concatemer-report', 'dtr-report',
                  'checkv', 'genomad', 'output', 'summary-output']:
         parser.add_argument('--' + name, required=True)
+    parser.add_argument("--assembly-info", "--flye-info", dest="flye_info", required=True)
+    parser.add_argument("--assembler", required=True)
     args = parser.parse_args()
     sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
-                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output)
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ rule pharokka_phage:
         faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "phanotate.faa"),
         faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "phanotate_raw.faa")
     input: 
-        virus = rules.fix_circular_viral_contigs_per_sample.output.corrected,
+        virus = rules.select_viral_assembly.output.corrected,
         db = "/work/river/Databases/pharokka_db"
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")

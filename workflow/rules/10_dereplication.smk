@@ -104,17 +104,18 @@ rule thebigbam_mapping_post_dereplication:
         bam=os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", "{sample}_on_{representative}.bam")
     input:
         assembly=post_dereplication_reference,
-        read1=rules.preprocess_reads_porechop.output
+        read1=sample_reads
     wildcard_constraints:
         sample="|".join(__import__("re").escape(sample) for sample in PHAGES_LIST) or "(?!)",
         representative="[^/]+"
+    params: mapper=sample_mapper
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
     threads: 4
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_on_{representative}_mapping_post_dereplication.log")
     message: "Mapping {wildcards.sample} reads to representative {wildcards.representative}"
     shell:
         """(date &&
-        thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --circular -o {output.bam:q} &&
+        thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular -o {output.bam:q} &&
         date) &> {log:q}"""
 
 rule thebigbam_annotations_post_dereplication:

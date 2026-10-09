@@ -1,5 +1,8 @@
 import os
 
+wildcard_constraints:
+    sample="[^/]+"
+
 ### Configuration
 configfile: os.getcwd()+"/../config/config.yaml"
 
@@ -10,17 +13,68 @@ RESULTS_DIR = config["results_dir"]
 # list of phages
 with open(SAMPLES_FILE) as f:
     READ_FILES = {}
+    SHORT_READS = {}
     HOSTS_LIST = {}
 
     for line in f:
         if line.strip():
             fields = line.rstrip("\r\n").split("\t")
             sample, r1 = fields[:2]
-            host = fields[2].strip() if len(fields) > 2 else ""
-            READ_FILES[sample] = r1
+            host = fields[3].strip() if len(fields) > 3 else ""
+            missing = {"", "na", "none", "-"}
+            r1 = r1.strip()
+            short = fields[2].strip() if len(fields) > 2 else ""
+            READ_FILES[sample] = "" if r1.lower() in missing else r1
+            SHORT_READS[sample] = "" if short.lower() in missing else short
+            if not READ_FILES[sample] and not SHORT_READS[sample]:
+                raise ValueError(f"No long or short reads supplied for {sample}")
             HOSTS_LIST[sample] = "" if host.lower() in {"", "na", "none", "-"} else host
 
 PHAGES_LIST = list(READ_FILES.keys())
+
+def read_input_files(path):
+    if not path:
+        raise ValueError("No read input supplied")
+    if not os.path.isdir(path):
+        return [path]
+    files = [os.path.join(path, name) for name in sorted(os.listdir(path))
+             if name.lower().endswith((".fastq", ".fq", ".fastq.gz", ".fq.gz"))
+             and os.path.isfile(os.path.join(path, name))]
+    if not files:
+        raise ValueError(f"No FASTQ files found in {path}")
+    return files
+
+def sample_reads(wildcards):
+    pattern = (rules.preprocess_reads_porechop.output[0] if READ_FILES[wildcards.sample]
+               else rules.prepare_short_reads.output[0])
+    return pattern.format(sample=wildcards.sample)
+
+def candidate_assembly(wc):
+    if wc.assembler in {"flye", "autocycler"} and not READ_FILES[wc.sample]:
+        raise ValueError(f"{wc.assembler} requires long reads for {wc.sample}")
+    return os.path.join(RESULTS_DIR, wc.sample, wc.assembler, "assembly.fasta")
+
+def primary_quality(wc):
+    assembler = "flye" if READ_FILES[wc.sample] else "spades"
+    return rules.checkv_candidate.output.checkv_quality.format(sample=wc.sample, assembler=assembler)
+
+def selected_candidate_inputs(wc):
+    import csv
+    quality = checkpoints.primary_viral_quality.get(sample=wc.sample).output[0]
+    with open(quality) as handle:
+        high_quality = any(row["checkv_quality"] in {"Complete", "High-quality"}
+                           for row in csv.DictReader(handle, delimiter="\t"))
+    assembler = ("flye" if high_quality else "autocycler") if READ_FILES[wc.sample] else "spades"
+    values = dict(rules.fix_circular_viral_contigs_per_sample_candidate.output.items())
+    values.update(dict(rules.genomad_candidate.output.items()))
+    values.update(dict(rules.checkv_candidate.output.items()))
+    values["assembly"] = os.path.join(RESULTS_DIR, "{sample}", "{assembler}", "assembly.fasta")
+    if assembler == "flye":
+        values["flye_info"] = rules.assembly_reads_flye.output.info
+    return {name: str(path).format(sample=wc.sample, assembler=assembler) for name, path in values.items()}
+
+def sample_mapper(wildcards):
+    return "minimap2-ont" if READ_FILES[wildcards.sample] else "minimap2-sr-secondary"
 
 def active_viral_samples(wildcards):
     import csv
@@ -37,8 +91,7 @@ def per_sample_pipeline_inputs(wildcards):
         raise ValueError(f"Unknown sample: {wildcards.sample}")
     if wildcards.sample not in active_viral_samples(wildcards):
         return [report_directory]
-    outputs = [*rules.genomad.output,
-               *rules.phageterm.output, *rules.checkv.output,
+    outputs = [*rules.phageterm.output,
                *rules.pharokka_plot.output, *rules.genotate_pharokka_plot.output,
                rules.antiDefenseFinder.output.systems,
                *rules.combine_empathi_with_sublyme.output, *rules.checkamg.output]
@@ -50,7 +103,7 @@ def comparison_pipeline_inputs(wildcards):
         return [report_directory]
     return [report_directory, rules.ani_for_dereplication.output.ani_results,
             *rules.viruses_dereplicated.output, *rules.dereplication_report.output, *rules.lovis4u_pharokka.output,
-            *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output]
+            *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output, *rules.vcontact3.output]
 
 ### Rules to include
 # Function to recursively include all .smk files

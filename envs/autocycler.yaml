@@ -1,0 +1,17 @@
+name: autocycler
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - autocycler=0.7.0
+  - flye=2.9.6
+  - raven-assembler=1.8.3
+  - miniasm
+  - minipolish
+  - minimap2
+  - racon
+  - canu
+  - metamdbg
+  - necat
+  - nextdenovo
+  - plassembler

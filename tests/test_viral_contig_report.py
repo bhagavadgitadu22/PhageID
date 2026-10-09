@@ -29,7 +29,7 @@ class ViralReportTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.p=Path(self.tmp.name)
-        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcirc.\trepeat\ncontig_1\t300\t42\tY\tN\ncontig_2\t80\t17\tN\tN\n')
+        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tflye_circularity\nsample_with_underscores_contig_1\t300\t42\t30\tY\nsample_with_underscores_contig_2\t80\t17\t10\tN\n')
         (self.p/'input.fa').write_text('>sample_with_underscores_contig_1\n'+'A'*90+'\n>sample_with_underscores_contig_2\n'+'C'*80+'\n')
         self.concat=[dict(contig_id='sample_with_underscores_contig_1',original_length=300,corrected_length=100,num_copies=3,status='corrected'),dict(contig_id='sample_with_underscores_contig_2',original_length=80,corrected_length=80,num_copies=0,status='no_repeats')]
         self.dtr=[dict(contig_id='sample_with_underscores_contig_1',original_length=100,corrected_length=90),dict(contig_id='sample_with_underscores_contig_2',original_length=80,corrected_length=80)]
@@ -39,7 +39,7 @@ class ViralReportTests(unittest.TestCase):
     def concatenate_reports(self, reports, output_dir):
         import shlex
         import subprocess
-        source=(ROOT/'workflow/rules/2_assembly.smk').read_text()
+        source=(ROOT/'workflow/rules/02_assembly.smk').read_text()
         command=source.split('checkpoint viral_report_global:')[1].split('"""')[1]
         quote=lambda value: shlex.quote(str(value))
         command=command.replace(':q}', '}').format(
@@ -59,8 +59,10 @@ class ViralReportTests(unittest.TestCase):
         rows=read_tsv(self.p/'stats.tsv')
         self.assertEqual([row['Total bp'] for row in rows],['300','80'])
         self.assertEqual([row['Total corrected bp'] for row in rows],['90','80'])
+        self.assertEqual(rows[0]['Assembler'],'flye')
         self.assertEqual(rows[0]['Coverage'],'42')
-        self.assertEqual(rows[0]['Circular'],'Y')
+        self.assertEqual(rows[0]['Coverage without bacteria'],'30')
+        self.assertEqual(rows[0]['Flye circularity'],'Y')
         self.assertEqual(rows[0]['Number of concatemers broken'],'2')
         self.assertEqual(rows[0]['DTR length removed'],'10')
         self.assertEqual(rows[1]['DTR length removed'],'0')
@@ -108,9 +110,10 @@ class ViralReportTests(unittest.TestCase):
         dtr=dict(contig_id=name,original_length=100,corrected_length=100)
         write_csv(self.p/'concat.csv',[concat],list(concat))
         write_csv(self.p/'dtr.csv',[dtr],list(dtr))
+        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tflye_circularity\n'+name+'\t100\t42\t30\tNA\n')
         self.report()
         row=read_tsv(self.p/'stats.tsv')[0]
-        self.assertEqual((row['Total bp'],row['Coverage'],row['Circular']),('100','42','N'))
+        self.assertEqual((row['Total bp'],row['Coverage'],row['Flye circularity']),('100','42','NA'))
 
     def test_empty_enrichment_needs_no_annotations(self):
         module.write_tsv(self.p/'empty.tsv',module.CONTIG_FIELDS,[])
@@ -146,8 +149,8 @@ class ViralReportTests(unittest.TestCase):
 
     def test_checkv_skips_empty_fasta(self):
         import subprocess
-        source=(ROOT/'workflow/rules/2_assembly.smk').read_text()
-        command=source.split('rule checkv:')[1].split('"""')[1]
+        source=(ROOT/'workflow/rules/02_assembly.smk').read_text()
+        command=source.split('rule checkv_candidate:')[1].split('"""')[1]
         (self.p/'empty.fa').write_text('')
         output=self.p/'checkv/quality_summary.tsv'
         log=self.p/'checkv.log'
@@ -158,7 +161,7 @@ class ViralReportTests(unittest.TestCase):
 
     def test_missing_metadata_fails(self):
         (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcirc.\n')
-        with self.assertRaisesRegex(ValueError,'No Flye metadata'): self.report()
+        with self.assertRaisesRegex(ValueError,'No assembly metadata'): self.report()
 
     def test_checkpoint_filters_targets_and_skips_all_empty_comparison(self):
         module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['ready','1','10','10','ready'])),dict(zip(module.SAMPLE_FIELDS,['empty','0','0','0','no_viral_contigs']))])
