@@ -1,9 +1,58 @@
-# ALP snakemake workflow for phage genome characterization
+# ALP Snakemake workflow for phage genome characterization
 
-This Snakemake workflow allows the characterization of phage genomes via long read sequencing.
-It preprocesses the long reads using porechop, assembles each sample with flye and detects viral contigs longer than 2 kbp with geNomad.
-Viral quality is assessed with CheckV and contigs are annotated via multiple viral tools (pharokka, phold, empathi, sublyme).
-All viral contigs dereplicated using MIUVIG standards and final comparisons are produced across samples using ANI, lovis4u and thebigbam.
+PhageID assembles phage isolates from Oxford Nanopore long reads or TruSeq single-end short reads, selects viral contigs, assesses their quality, annotates them and compares samples.
+
+## Assembly and checkpoints
+
+1. **Preprocess reads.** Combine FASTQ inputs, then trim long reads with Porechop or process short reads with fastp (adapter detection, Q20 filtering, minimum length 50 bp). If a bacterial host genome is supplied, remove host-mapping reads from either read type. The `assembly_read_status` checkpoint records read counts and the percentage removed, and determines whether bacterial-free reads are available.
+2. **Assemble.** Start with bacterial-free reads when available; otherwise use all preprocessed reads. Long-read samples use Flye (`--meta --nano-raw`) after reproducible subsampling to approximately 100 Mb: 1,000× against a fixed 100 kbp estimate, seed 42. Smaller inputs retain all reads. Short-read-only samples use SPAdes (`--isolate`, single-end input). When both read columns are provided, the long-read route is used.
+3. **Assess each candidate.** Run geNomad, retain viral sequences of at least 2 kbp, prefix contig IDs with the sample name, correct likely concatemers and terminal repeats, then run CheckV. The `candidate_viral_quality` checkpoint makes these results available for assembly selection.
+4. **Rescue and select.** If Flye produces no `Complete` or `High-quality` viral contig, run Autocycler on the same read set. By default, four subsets are assembled independently with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler and Raven (32 jobs), followed by consensus assembly. Select Autocycler if it contains retained viral contigs; otherwise retain Flye. If the filtered route yields no viral contigs, repeat with all reads to allow host-matching prophage recovery. SPAdes also retries with all reads after an empty filtered result. This selection policy does not rank every candidate by a combined quality score. An assembler command failure still stops the workflow; rescue follows completed quality assessments.
+5. **Report and gate downstream work.** Map all reads and bacterial-free reads onto the selected corrected viral contigs using theBIGbam `--circular`. Write per-sample contig and summary tables. The `viral_report_global` checkpoint concatenates them and allows only samples with retained viral contigs to enter annotation and comparison. Empty viral results remain in the sample report and skip CheckV execution and downstream annotation.
+
+Autocycler uses `autocycler_subsample.params.subset_count` (currently 4) for both subsampling and candidate jobs. `autocycler_genome_size` in `config/config.yaml` defaults to `auto`, estimated with Raven; a fixed value such as `100000` is also accepted. Candidate read chemistry is currently `ont_r10` in `workflow/rules/03_autocycler_rescue_cycle.smk`. Flye subsampling parameters are set in `workflow/rules/02_assembly.smk`. Completed candidate failures are logged and skipped; consensus requires at least two successful assemblies and one QC-pass cluster. Candidate status and consensus intermediates are retained under each assembly attempt.
+
+Plassembler candidates run in chromosome-free mode (`--no_chromosome`, forwarded through Autocycler `--args`) and use `/work/river/Databases/plassembler_db`, exported as `PLASSEMBLER_DB` from the candidate rule's `params.plassembler_db`. Download the database there, or edit that parameter; the workflow does not download it. See the [Autocycler helper implementation](https://github.com/rrwick/Autocycler/blob/v0.7.0/src/helper.rs) for database lookup and candidate dependencies.
+
+## After assembly
+
+Selected contigs receive Pharokka/PHANOTATE and Phold annotations, alternative Genotate gene calls with Pharokka protein annotation, per-contig plots, PhageTerm analysis, antiDefenseFinder predictions, Empathi/Sublyme predictions and CheckAMG analysis. Functional predictions are added to the Phold GFF for theBIGbam.
+
+The separate comparison target calculates all-versus-all ANI and dereplicates contigs at ≥95% ANI and ≥85% aligned fraction of the member contig, with no minimum representative aligned fraction. Clustering considers contigs in descending length, so representatives are chosen by length. It produces a dereplication report, LoVis4u comparisons and vConTACT3 clustering with prokaryotic reference genomes.
+
+The first theBIGbam database uses MAG view: one sample contains all its selected viral contigs, with two BAMs per sample (all reads and bacterial-free reads). The `prepare_post_dereplication_mapping` checkpoint resolves sample–representative pairs after clustering. The second database uses contig view, representative-only annotations and `{sample}_on_{representative}.bam` mappings.
+
+## Inputs and running
+
+`data/samples.tsv` is tab-separated **without a header**, with columns in this order:
+
+| Sample | Long reads | TruSeq single-end reads | Bacterial host genome |
+| --- | --- | --- | --- |
+| isolate_long | /path/to/long_reads/ | NA | /path/to/host.fasta |
+| isolate_short | NA | /path/to/single_end.fastq.gz | NA |
+
+Each read input can be a file or a directory. Directories combine `.fastq`, `.fq`, `.fastq.gz` and `.fq.gz` files in filename order, ignoring subdirectories. Empty fields, `NA`, `None` and `-` mean absent. At least one read input is required. An absent host genome keeps all reads; a supplied host FASTA must exist.
+
+Set `samples_file` and `results_dir` in `config/config.yaml`, and check the database paths in the rules. Run from `workflow/` using the Snakemake environment defined in `envs/requirements.yaml`:
+
+```bash
+cd workflow
+snakemake --use-conda --cores 8 corrected_assembly_all_phages  # assembly and reports
+snakemake --use-conda --cores 8 pipeline_all_phages           # add sample annotation
+snakemake --use-conda --cores 8 pipeline_comparison_phages    # add cross-sample comparisons
+```
+
+`pipeline_all_phages` is the default target. Autocycler can also be requested directly by targeting `<results_dir>/<sample>/assembly_attempts/{filtered,all}/autocycler/assembly.fasta` for a long-read sample.
+
+## Main reports
+
+- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, correction counts, CheckV metrics and geNomad taxonomy/provirus status.
+- `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/viral_contigs/viral_contigs.tsv` and `reports/viral_contigs/samples.tsv`.
+- `combined_viruses/dereplication/dereplication_report.tsv`: every contig before dereplication, its selection status, representative, lengths, cluster size, ANI and aligned fractions.
+
+`Total bp` is the viral sequence length before correction; for a provirus it is the extracted region length. `Total corrected bp` and coverage refer to corrected sequences. Coverage counts aligned bases, including origin-spanning alignments, divided by corrected length. `Coverage` uses all preprocessed reads; `Coverage without bacteria` uses host-filtered reads. Without a host genome, both use the same reads and bacterial percentage is `NA`. Flye circularity is available for whole Flye contigs; extracted proviruses and other assemblers report `NA`.
+
+Read counts are measured after preprocessing. `Reads used for assembly number` is the actual Flye subset size, or the input read set size for SPAdes/Autocycler; Autocycler assembles overlapping subsets of that set. CheckV metrics describe corrected contigs, while geNomad annotations describe the original viral sequences.
 
 ## Key resources table
 
@@ -20,13 +69,14 @@ The tables follow the Cell Press STAR Methods convention. Software identifiers b
 | fastp | [fastp](https://github.com/OpenGene/fastp) | v0.23.4; single-end TruSeq preprocessing |
 | Seqtk | [Li; seqtk](https://github.com/lh3/seqtk) | v1.5 |
 | Autocycler | [Autocycler](https://github.com/rrwick/Autocycler) | v0.7.0; automatic long-read fallback |
-| miniasm and Minipolish | [miniasm](https://github.com/lh3/miniasm); [Minipolish](https://github.com/rrwick/Minipolish) | Unpinned; Autocycler candidate assembly dependencies |
-| Racon | [Racon](https://github.com/lbcb-sci/racon) | Unpinned; Autocycler candidate assembly dependency |
-| Canu | [Canu](https://github.com/marbl/canu) | Unpinned; Autocycler candidate assembler |
-| metaMDBG | [metaMDBG](https://github.com/GaetanBenoitDev/metaMDBG) | Unpinned; Autocycler candidate assembler |
-| NECAT | [NECAT](https://github.com/xiaochuanle/NECAT) | Unpinned; Autocycler candidate assembler |
-| NextDenovo | [NextDenovo](https://github.com/Nextomics/NextDenovo) | Unpinned; Autocycler candidate assembler |
-| Plassembler | [Plassembler](https://github.com/gbouras13/plassembler) | Unpinned; Autocycler candidate assembler |
+| miniasm and Minipolish | [miniasm](https://github.com/lh3/miniasm); [Minipolish](https://github.com/rrwick/Minipolish) | miniasm v0.3; Minipolish v0.2.1 |
+| Racon | [Racon](https://github.com/lbcb-sci/racon) | v1.5.0 |
+| Canu | [Canu](https://github.com/marbl/canu) | v2.3 |
+| metaMDBG | [metaMDBG](https://github.com/GaetanBenoitDev/metaMDBG) | v1.4 |
+| NECAT | [NECAT](https://github.com/xiaochuanle/NECAT) | v0.0.1_update20200803 |
+| NextDenovo | [NextDenovo](https://github.com/Nextomics/NextDenovo) | v2.5.2 |
+| NextPolish | [NextPolish](https://github.com/Nextomics/NextPolish) | Unpinned; polishing for the NextDenovo candidate |
+| Plassembler | [Plassembler](https://github.com/gbouras13/plassembler) | v1.8.5 |
 | Raven | [Raven](https://github.com/lbcb-sci/raven) | v1.8.3 (Autocycler candidate assemblies) |
 | Flye | [Flye](https://github.com/mikolmogorov/Flye) | v2.9.6 |
 | SPAdes | [SPAdes](https://github.com/ablab/spades) | v4.3.0 |
@@ -45,7 +95,7 @@ The tables follow the Cell Press STAR Methods convention. Software identifiers b
 | LoVis4u | [Egorov et al.; LoVis4u](https://github.com/art-egorov/lovis4u) | v0.1.5 |
 | vConTACT3 | [vConTACT3](https://vcontact3.readthedocs.io/) | v3.1.6 |
 | theBIGbam | [theBIGbam](https://github.com/bhagavadgitadu22/theBIGbam) | v0.7.0 |
-| Minimap2 | [Li; minimap2](https://github.com/lh3/minimap2) | Unpinned; used for read mapping |
+| Minimap2 | [Li; minimap2](https://github.com/lh3/minimap2) | v2.31 (Autocycler); otherwise unpinned; used for read mapping |
 | SAMtools | [SAMtools](https://www.htslib.org/) | Unpinned; used for alignment processing |
 | BLAST+ (BLASTn) | [NCBI BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi) | Unpinned; used for self-alignment and genome comparisons |
 | Biopython | [Biopython](https://biopython.org/) | v1.80 (Pharokka environment) |
@@ -56,7 +106,7 @@ The tables follow the Cell Press STAR Methods convention. Software identifiers b
 | pyCirclize | [pyCirclize](https://github.com/moshi4/pyCirclize) | Unpinned; used for Genotate contig plots |
 | GNU Scientific Library | [GNU GSL](https://www.gnu.org/software/gsl/) | v2.7.0 (Pharokka environment) |
 | Poetry | [Poetry](https://python-poetry.org/) | v1.8.5 (PhageTerm installation) |
-| PhageID workflow and custom scripts | [This repository](https://github.com/bhagavadgitadu22/PhageID) | `workflow/` and `scripts/`; use the repository commit corresponding to the analysis |
+| PhageID workflow and custom scripts | [This repository](https://github.com/bhagavadgitadu22/PhageID) | `workflow/` and `workflow/scripts/`; use the repository commit corresponding to the analysis |
 
 ### Deposited data and reference databases
 
@@ -77,52 +127,8 @@ The tables follow the Cell Press STAR Methods convention. Software identifiers b
 
 Database identifiers reflect the configured paths and download commands; local database contents have not been verified. DefenseFinder models and LoVis4u HMM profiles depend on the download date. For reproducible analyses, record database release identifiers or checksums and retain the resolved environment package lists alongside the workflow commit.
 
+
 ## Citing the pipeline
 
-If you use this worflow in your research, please cite this paper:
+If you use this workflow in your research, please cite this paper:
     Wai Hoe Chin, Martin Boutroux, Akira Harding, Davide Demurtas, Florian Baier, Hannes Peter (2026). Viral isolation reveals novel and diverse phages infecting natural stream biofilms. bioRxiv 2026.03.26.713887. https://doi.org/10.64898/2026.03.26.713887
-
-## Sample sheet
-
-`data/samples.tsv` is tab-separated, without a header: sample name, long reads, TruSeq single-end short reads, and optional bacterial host genome FASTA. Either read column accepts a FASTQ file or a directory containing `.fastq`, `.fq`, `.fastq.gz`, or `.fq.gz` files. Directory inputs are combined in filename order; other files and subdirectories are ignored. Use empty fields, `NA`, `None`, or `-` for missing inputs. At least one read input is required. If long reads are supplied, the long-read assembly route is used; otherwise the single-end short reads are assembled with SPAdes (`--isolate`) and mapped with minimap2's short-read preset. An absent host genome skips host filtering; a supplied host FASTA must exist.
-
-Example short-read-only row (empty second and fourth fields):
-```text
-sample_name		/path/to/single_end.fastq.gz
-```
-
-Per-sample `assembly_stats.tsv` and the global `reports/viral_contigs/viral_contigs.tsv` include CheckV gene counts, quality, completeness and contamination, and geNomad provirus status and taxonomy. CheckV describes corrected sequences; geNomad describes the original viral sequences. `viral_report` writes each sample’s contig table and a one-row `viral_sample_report.tsv` after CheckV. The `viral_report_global` checkpoint concatenates these into global contig and sample tables, then selects samples with viral contigs for annotation. CheckV is skipped for empty viral FASTAs. Both coverage columns come from the same circular BAMs used by the first theBIGbam database, mapped onto corrected viral contigs: `Coverage` uses all reads and `Coverage without bacteria` uses host-filtered reads. With no host genome, both use the same reads. Provirus coverage is measured on the corrected extracted sequence; its original reported length is the extracted region. `Flye circularity` retains Flye’s Y/N value for whole contigs and is `NA` for extracted proviruses and other assemblers.
-
-The comparison target also writes `combined_viruses/dereplication/dereplication_report.tsv`: one row per corrected viral contig before dereplication, with length, selection status, representative ID and length, and cluster size (including the representative).
-
-The dereplication report also includes `ANI identity (%)`, `Aligned fraction (%)` of the member contig, and `Representative aligned fraction (%)`. These use the representative-to-member ANI row used in clustering: `pid`, `tcov`, and `qcov`, respectively. Representatives compared with themselves are reported as 100% for all three values. Current clustering requires ANI ≥95% and member aligned fraction ≥85%; representative aligned fraction has no minimum (`min_qcov=0`).
-
-vConTACT3 runs on dereplicated representatives. `genemap_for_vcontact3` extracts Pharokka CDS translations from GenBank files into a combined `vcontact3_inputs/proteins.faa`, writes matching `gene2genome.tsv` (`protein_id`, `genome_id`), and provides `genome_lengths.tsv`. Protein IDs are made unique across contigs. The comparison target runs vConTACT3 with prokaryotic reference genomes and exports Cytoscape, profiles, and completeness results to `vcontact3_results/`.
-
-## Autocycler assembly fallback
-
-Assembly first uses host-filtered reads when a host reference is provided. Long-read samples run Flye, geNomad, contig correction and CheckV. If no retained viral contig is `Complete` or `High-quality`, a checkpoint automatically runs Autocycler from the same assembly read set and assesses its assembly through the same steps. Autocycler contigs are selected when present; if it finds none, existing Flye viral contigs are retained. If neither assembly yields retained viral contigs, the pipeline repeats the assembly route using all preprocessed reads, allowing recovery of host-matching prophages. Short-read samples similarly retry SPAdes with all reads after an empty filtered result. Samples with no host reference, or zero reads after filtering, start directly with all reads. Short-read-only samples use SPAdes without this fallback. You can also request `<results_dir>/<sample>/assembly_attempts/filtered/autocycler/assembly.fasta` directly. The route estimates genome size, creates four read subsets, assembles each with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo, Plassembler and Raven, then compresses, clusters, trims, resolves and combines QC-pass clusters using the [automated Autocycler workflow](https://github.com/rrwick/Autocycler/wiki/Fully-automated-assembly).
-
-From `workflow/`:
-
-```bash
-snakemake --use-conda --cores 8 /scratch/boutroux/AKIRA/SAMPLE/assembly_attempts/filtered/autocycler/assembly.fasta
-```
-
-Replace the sample and results path. Optional configuration: `autocycler_subsets` (default 4), `autocycler_genome_size` (default `auto`), and `autocycler_read_type` (default `ont_r10`; alternatives `ont_r9`, `pacbio_clr`, `pacbio_hifi`). Set the read type to match your sequencing chemistry.
-
-Failed candidate assemblies are logged and skipped; the run requires multiple successful assemblies and at least one QC-pass cluster. Intermediate graphs and metrics are retained under `assembly_attempts/{filtered,all}/autocycler/consensus_work/attempt_*/autocycler_out/`. The selected assembler is recorded in `assembly_selection/assembler.txt` and the `Assembler` column of per-sample and global contig reports. All assemblers reuse the two theBIGbam `--circular` mappings for coverage before and after host filtering. Mean depth counts aligned M/=/X bases, including those wrapping across the origin, divided by the corrected contig length. Secondary, duplicate, unmapped and QC-failed alignments are excluded; supplementary alignments are retained. Only Flye supplies assembler circularity metadata. A Flye command failure still stops the workflow; this fallback applies after successful Flye processing and CheckV assessment.
-
-## First theBIGbam database
-
-`thebigbam_ALP.db` uses `--view mag`: all selected viral contigs from one sample form one MAG named after that sample. Per-sample enriched GFF files and corrected FASTAs are staged under `thebigbam/mag_inputs/`. Each sample contributes two mappings, `{sample}.bam` (all reads) and `{sample}_without_bacteria.bam` (host-filtered reads). With no host genome, both mappings use the same reads. The database after dereplication keeps its existing contig view.
-
-## Flye read subsampling
-
-Flye receives a reproducible random subset of the selected assembly read set, targeting 1,000× depth against a 100 kbp genome estimate (about 100 Mb of sequenced bases). Samples below that target retain all reads. Whole records are kept, so the target may be exceeded by up to one read. Settings in `config/config.yaml`: `flye_genome_size_bp` (100000), `flye_target_coverage` (1000; set to 100 for about 10 Mb), and `flye_subsample_seed` (42). Selected read counts and bases are recorded in each sample’s `reads/flye_subsampling.{filtered,all}.tsv`. This depth is an estimate based on total input bases; bacterial contamination and mixed phages affect the actual phage depth. Mapping and coverage use all preprocessed reads and host-filtered reads, without Flye subsampling. Autocycler independently subsamples whichever assembly read set is being tried.
-
-Assembly statistics include `Assembly reads` (`all` or `bacterial free`), `Percentage bacterial reads`, `All reads number`, and `Reads used for assembly number`. Counts refer to reads after preprocessing. Bacterial percentage is the fraction removed by host mapping and is `NA` without a host reference. Flye’s assembly count is its actual selected subset; SPAdes and Autocycler report the input read set size (Autocycler subsets reuse those reads). Attempt files are separate under `assembly_attempts/{filtered,all}/{assembler}/`.
-
-TruSeq reads pass through fastp before host filtering, assembly and mapping, using single-end adapter detection, Q20 filtering and a 50 bp minimum length. Cleaned FASTQ, JSON and HTML reports are written to `{sample}/reads/fastp.{sample}.{fastq,json,html}`. Reported read counts refer to the reads retained after this preprocessing.
-
-Autocycler candidate assemblies run as separate jobs: one assembler per read subset (32 jobs with eight assemblers and four subsets). Each job keeps its FASTA, status and intermediates under `autocycler/candidate_jobs/{assembler}/sample_{subset}/`, with a separate log. The collection rule waits for all jobs, records `candidates/candidate_status.tsv`, and requires at least two successes before consensus. Retry one candidate by targeting its directory with `snakemake --force --use-conda --cores 8 <candidate_directory>`, then resume the main target. Scheduler-killed jobs remain Snakemake failures and need resubmission; completed helper failures are recorded and skipped. Optional per-assembler resource maps: `autocycler_candidate_threads`, `autocycler_candidate_mem_mb`, and `autocycler_candidate_runtime` (minutes).

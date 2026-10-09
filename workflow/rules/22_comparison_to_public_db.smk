@@ -1,11 +1,11 @@
 rule genemap_for_vcontact3:
-    input:
-        representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
-        genbanks=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"))
     output:
         proteins=os.path.join(RESULTS_DIR, "vcontact3_inputs", "proteins.faa"),
         gene_map=os.path.join(RESULTS_DIR, "vcontact3_inputs", "gene2genome.tsv"),
         lengths=os.path.join(RESULTS_DIR, "vcontact3_inputs", "genome_lengths.tsv")
+    input:
+        representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
+        genbanks=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"))
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "genemap_for_vcontact3.log")
     shell:

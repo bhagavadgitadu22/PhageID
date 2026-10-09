@@ -20,16 +20,18 @@ rule autocycler_subsample:
         reads=assembly_reads,
         genome_size=rules.autocycler_genome_size.output
     output: directory(os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "autocycler", "read_subsets"))
-    params: subset_count=config.get("autocycler_subsets", 4)
+    params: subset_count=4
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_subsample.log")
     shell:
         """autocycler subsample --reads {input.reads:q} --out_dir {output:q} --count {params.subset_count} --genome_size "$(cat {input.genome_size:q})" > {log:q} 2>&1"""
 
 def autocycler_candidate_jobs(wc):
-    subsets = 4
+    subsets = int(rules.autocycler_subsample.params.subset_count)
+    if subsets < 1:
+        raise ValueError("subset_count must be at least 1")
     return expand(rules.autocycler_candidate_assembly.output[0], sample=wc.sample, readset=wc.readset,
-                  candidate_assembler=["canu", "flye", "metamdbg", "miniasm", "necat", "nextdenovo", "plassembler", "raven"], 
+                  candidate_assembler=["canu", "flye", "metamdbg", "miniasm", "necat", "nextdenovo", "plassembler", "raven"],
                   subset=[f"{i:02d}" for i in range(1, subsets + 1)])
 
 # Each job runs one assembler on one subset. Failed attempts remain reviewable.
@@ -43,15 +45,21 @@ rule autocycler_candidate_assembly:
         subset="[0-9]+"
     params:
         read_type="ont_r10",
+        plassembler_db="/work/river/Databases/plassembler_db",
         reads=lambda wc, input: os.path.join(input.subsets, f"sample_{wc.subset}.fastq")
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
     threads: 8
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_{candidate_assembler}_{subset}.log")
     shell:
         """
+        export PLASSEMBLER_DB={params.plassembler_db:q}
         test -s {params.reads:q}
         mkdir -p {output:q}
-        if autocycler helper {wildcards.candidate_assembler:q} --threads {threads} --reads {params.reads:q} --out_prefix {output:q}/assembly --genome_size "$(cat {input.genome_size:q})" --read_type {params.read_type:q} > {log:q} 2>&1 && [ -s {output:q}/assembly.fasta ]; then
+        extra_args=()
+        if [ {wildcards.candidate_assembler:q} = plassembler ]; then
+            extra_args=(--args --no_chromosome)
+        fi
+        if autocycler helper {wildcards.candidate_assembler:q} --threads {threads} --reads {params.reads:q} --out_prefix {output:q}/assembly --genome_size "$(cat {input.genome_size:q})" --read_type {params.read_type:q} "${{extra_args[@]}}" > {log:q} 2>&1 && [ -s {output:q}/assembly.fasta ]; then
             printf 'success\n' > {output:q}/status.txt
         else
             rm -f {output:q}/assembly.fasta

@@ -60,10 +60,10 @@ rule empathi_install:
         date) &> {log}"""
 
 rule empathi:
+    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses.csv")
     input: 
         pharokka = rules.pharokka_phage.output.faa,
         installation = rules.empathi_install.output
-    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses.csv")
     log: os.path.join(RESULTS_DIR, "logs", "empathi_{sample}.log")
     conda: os.path.join(ENV_DIR, "empathi.yaml")
     threads: 4
@@ -76,8 +76,8 @@ rule empathi:
         date) &> {log}"""
 
 rule sublyme:
-    input: rules.pharokka_phage.output.faa
     output: os.path.join(RESULTS_DIR, "{sample}", "sublyme", "sublyme_predictions.csv")
+    input: rules.pharokka_phage.output.faa
     log: os.path.join(RESULTS_DIR, "logs", "sublyme_{sample}.log")
     conda: os.path.join(ENV_DIR, "sublyme.yaml")
     threads: 4
@@ -89,10 +89,10 @@ rule sublyme:
         date) &> {log:q}"""
 
 rule combine_empathi_with_sublyme:
+    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses_with_sublyme.csv")
     input:
         empathi=rules.empathi.output,
         sublyme=rules.sublyme.output
-    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses_with_sublyme.csv")
     log: os.path.join(RESULTS_DIR, "logs", "combine_empathi_with_sublyme_{sample}.log")
     message: "Combining Empathi and Sublyme predictions"
     shell:

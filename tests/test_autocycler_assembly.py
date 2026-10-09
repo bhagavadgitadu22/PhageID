@@ -55,9 +55,14 @@ if step=='combine':
             (p/'size').write_text('50000\n')
             executable=p/'autocycler'
             executable.write_text(r"""#!/usr/bin/env python3
-import sys
+import os,sys
 from pathlib import Path
 args=sys.argv[1:]
+if args[1]=='plassembler':
+    assert args[-2:]==['--args','--no_chromosome'], args
+    assert os.environ['PLASSEMBLER_DB'].endswith('/database')
+else:
+    assert '--args' not in args and '--no_chromosome' not in args, args
 if args[1]=='flye': sys.exit(1)
 Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
 """)
@@ -71,7 +76,7 @@ Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
                 jobs.append(output)
                 rendered=command.replace(':q}', '}').format(
                     input=SimpleNamespace(genome_size=quote(p/'size')),
-                    output=quote(output),params=SimpleNamespace(read_type='ont_r10',reads=quote(subsets/'sample_01.fastq')),
+                    output=quote(output),params=SimpleNamespace(read_type='ont_r10',reads=quote(subsets/'sample_01.fastq'),plassembler_db=quote(p/'database')),
                     wildcards=SimpleNamespace(candidate_assembler=assembler),threads=2,log=quote(p/f'{assembler}.log'))
                 subprocess.run(['bash','-euo','pipefail','-c',rendered],env=env,check=True,capture_output=True)
                 self.assertEqual((output/'status.txt').read_text().strip(),'failed' if assembler=='flye' else 'success')

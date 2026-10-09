@@ -56,28 +56,27 @@ rule viruses_dereplicated:
         """
 
 rule dereplication_report:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "dereplication_report.tsv")
     input:
         fasta=rules.combine_all_viruses.output,
         clusters=rules.ani_for_dereplication.output.clustering_results,
         representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
         ani=rules.ani_for_dereplication.output.ani_results
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "dereplication_report.tsv")
     log: os.path.join(RESULTS_DIR, "logs", "dereplication_report.log")
     shell:
         """python ./scripts/dereplication_report.py --fasta {input.fasta:q} --clusters {input.clusters:q} --representatives {input.representatives:q} --ani {input.ani:q} --output {output:q} > {log:q} 2>&1"""
 
 # Resolve data-dependent sample/representative pairs after clustering.
 checkpoint prepare_post_dereplication_mapping:
+    output:
+        prepared=directory(os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs"))
     input:
         representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
         clusters=rules.ani_for_dereplication.output.clustering_results,
         sample_fastas=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"))
-    output:
-        prepared=directory(os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs"))
     params:
         script=workflow.basedir + "/scripts/dereplication_mapping.py",
-        sample_args=lambda wildcards, input: [value for sample, fasta in zip(active_viral_samples(wildcards), input.sample_fastas)
-                                             for value in ("--sample-fasta", sample, str(fasta))]
+        sample_args=lambda wildcards, input: [value for sample, fasta in zip(active_viral_samples(wildcards), input.sample_fastas)                                     for value in ("--sample-fasta", sample, str(fasta))]
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "prepare_post_dereplication_mapping.log")
     shell:
