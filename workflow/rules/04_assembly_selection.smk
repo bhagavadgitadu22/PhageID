@@ -109,20 +109,17 @@ checkpoint candidate_viral_quality:
     wildcard_constraints: assembler="flye|spades|autocycler"
     shell: "cp {input.quality:q} {output.quality:q}; cp {input.status:q} {output.status:q}"
 
-# Publish one selected set of contigs for every downstream analysis.
+# Resolve the choice once and persist validated source paths before publication.
+checkpoint assembly_selection_manifest:
+    input: sources=selection_manifest_inputs
+    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "selected_sources.json")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_selection_manifest.log")
+    shell:
+        """python ./scripts/assembly_selection_manifest.py create --sample {wildcards.sample:q} --inputs {input.sources:q} --output {output:q} > {log:q} 2>&1"""
+
+# Static dependency: forcing publication cannot substitute checkpoint placeholders.
 rule select_viral_assembly:
-    input:
-        corrected=lambda wc: selected_candidate_inputs(wc)["corrected"],
-        concatemer_report=lambda wc: selected_candidate_inputs(wc)["concatemer_report"],
-        dtr_report=lambda wc: selected_candidate_inputs(wc)["dtr_report"],
-        checkv_quality=lambda wc: selected_candidate_inputs(wc)["checkv_quality"],
-        fasta=lambda wc: selected_candidate_inputs(wc)["fasta"],
-        summary=lambda wc: selected_candidate_inputs(wc)["summary"],
-        assembly=lambda wc: selected_candidate_inputs(wc)["assembly"],
-        status=lambda wc: selected_candidate_inputs(wc)["status"],
-        used_reads=lambda wc: selected_candidate_inputs(wc)["used_reads"],
-        filter_report=lambda wc: selected_candidate_inputs(wc)["filter_report"],
-        flye_info=lambda wc: [selected_candidate_inputs(wc)["flye_info"]] if "flye_info" in selected_candidate_inputs(wc) else []
+    input: manifest=rules.assembly_selection_manifest.output
     output:
         corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
         concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
@@ -135,22 +132,9 @@ rule select_viral_assembly:
         assembler=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembler.txt"),
         status=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly_status.txt"),
         read_stats=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "read_stats.tsv")
+    params:
+        destinations=lambda wc, output: [value for name, path in output.items()
+                                         for value in ("--destination", name, str(path))]
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_select_viral_assembly.log")
     shell:
-        """
-        cp {input.corrected:q} {output.corrected:q}
-        cp {input.concatemer_report:q} {output.concatemer_report:q}
-        cp {input.dtr_report:q} {output.dtr_report:q}
-        cp {input.checkv_quality:q} {output.checkv_quality:q}
-        cp {input.fasta:q} {output.fasta:q}
-        cp {input.summary:q} {output.summary:q}
-        cp {input.assembly:q} {output.assembly:q}
-        cp {input.status:q} {output.status:q}
-        if [ "$(basename "$(dirname "$(dirname {input.corrected:q})")")" = flye ]; then
-            cp "$(dirname {input.assembly:q})/assembly_info.txt" {output.flye_info:q}
-        else
-            printf '#seq_name\tlength\tcov.\tcirc.\n' > {output.flye_info:q}
-        fi
-        basename "$(dirname "$(dirname {input.corrected:q})")" > {output.assembler:q}
-        readset=$(basename "$(dirname "$(dirname {input.assembly:q})")")
-        python ./scripts/assembly_read_stats.py selected --filter-report {input.filter_report:q} --used-reads {input.used_reads:q} --readset "$readset" --output {output.read_stats:q}
-        """
+        """python ./scripts/assembly_selection_manifest.py publish --sample {wildcards.sample:q} --manifest {input.manifest:q} {params.destinations:q} > {log:q} 2>&1"""

@@ -64,11 +64,13 @@ def candidate_assembly(wc):
 CHECKV_QUALITY_RANK = {"Not-determined": 1, "Low-quality": 2, "Medium-quality": 3,
                       "High-quality": 4, "Complete": 5}
 
-def candidate_choice(sample, readset):
+def candidate_choice(sample, readset, dependencies=None):
     import csv
     primary = "flye" if READ_FILES[sample] else "spades"
     def quality(assembler):
         candidate = checkpoints.candidate_viral_quality.get(sample=sample, readset=readset, assembler=assembler).output
+        if dependencies is not None:
+            dependencies.extend([str(candidate.quality), str(candidate.status)])
         with open(candidate.status) as handle:
             status = handle.read().strip()
         if status == "failed":
@@ -87,15 +89,17 @@ def candidate_choice(sample, readset):
         return "autocycler", autocycler_quality
     return primary, primary_quality
 
-def selected_candidate_inputs(wc):
+def selected_candidate_inputs(wc, dependencies=None):
     import csv
     filter_report = checkpoints.assembly_read_status.get(sample=wc.sample).output[0]
+    if dependencies is not None:
+        dependencies.append(str(filter_report))
     with open(filter_report) as handle:
         stats = next(csv.DictReader(handle, delimiter="\t"))
     readset = "filtered" if HOSTS_LIST[wc.sample] and int(stats["Bacterial free reads"]) > 0 else "all"
-    assembler, best_quality = candidate_choice(wc.sample, readset)
+    assembler, best_quality = candidate_choice(wc.sample, readset, dependencies)
     if readset == "filtered" and best_quality < CHECKV_QUALITY_RANK["High-quality"]:
-        all_assembler, all_quality = candidate_choice(wc.sample, "all")
+        all_assembler, all_quality = candidate_choice(wc.sample, "all", dependencies)
         if all_quality > best_quality:
             readset, assembler = "all", all_assembler
     values = dict(rules.fix_circular_viral_contigs_per_sample_candidate.output.items())
@@ -110,6 +114,12 @@ def selected_candidate_inputs(wc):
         values["used_reads"] = (rules.remove_bacterial_contamination.output[0] if readset == "filtered" else sample_reads(wc))
     values["filter_report"] = filter_report
     return {name: str(path).format(sample=wc.sample, assembler=assembler, readset=readset) for name, path in values.items()}
+
+def selection_manifest_inputs(wc):
+    dependencies = []
+    sources = selected_candidate_inputs(wc, dependencies)
+    # Track every assessed candidate, including those that lost the comparison.
+    return list(dict.fromkeys(dependencies + list(sources.values())))
 
 def sample_mapper(wildcards):
     return "minimap2-ont" if READ_FILES[wildcards.sample] else "minimap2-sr-secondary"
@@ -156,7 +166,7 @@ def include_smk_files(directory):
 include_smk_files('rules/')
 
 # Copy/report selection must run in the controller after checkpoint inputs resolve.
-localrules: select_viral_assembly
+localrules: assembly_selection_manifest, select_viral_assembly
 
 ### Global rules
 # Assembly rules
