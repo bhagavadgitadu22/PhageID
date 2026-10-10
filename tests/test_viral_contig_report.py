@@ -159,10 +159,15 @@ class ViralReportTests(unittest.TestCase):
         command=source.split('rule checkv_candidate:')[1].split('"""')[1]
         (self.p/'empty.fa').write_text('')
         output=self.p/'checkv/quality_summary.tsv'
+        stale_genes=self.p/'checkv/tmp/proteins.faa'
+        stale_genes.parent.mkdir(parents=True)
+        stale_genes.write_text('>old_contig_gene\nMKK\n')
+        output.write_text('outdated result\n')
         log=self.p/'checkv.log'
         command=command.replace(':q}', '}').format(threads=1,input=SimpleNamespace(assembly=self.p/'empty.fa',db=self.p/'unused_db'),output=SimpleNamespace(checkv_quality=output),log=log)
         subprocess.run(['bash','-euo','pipefail','-c',command],check=True)
         self.assertEqual(read_tsv(output), [])
+        self.assertFalse(stale_genes.exists())
         self.assertIn('skipping CheckV',log.read_text())
 
     def test_missing_metadata_fails(self):

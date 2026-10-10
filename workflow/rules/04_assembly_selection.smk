@@ -87,6 +87,10 @@ rule checkv_candidate:
         """
         (
             date
+            # CheckV otherwise reuses cached genes from a previous input FASTA.
+            checkv_dir=$(dirname {output.checkv_quality:q})
+            rm -rf -- "$checkv_dir"
+            mkdir -p "$checkv_dir"
             if grep -q '^>' {input.assembly:q}; then
                 checkv end_to_end -t {threads} -d {input.db:q} {input.assembly:q} $(dirname {output.checkv_quality:q})
             else
@@ -110,7 +114,7 @@ checkpoint candidate_viral_quality:
     shell: "cp {input.quality:q} {output.quality:q}; cp {input.status:q} {output.status:q}"
 
 # Resolve the choice once and persist validated source paths before publication.
-checkpoint assembly_selection_manifest:
+rule assembly_selection_manifest:
     input: sources=selection_manifest_inputs
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "selected_sources.json")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_selection_manifest.log")
