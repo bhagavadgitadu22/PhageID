@@ -155,6 +155,9 @@ def include_smk_files(directory):
 # Include all .smk files from the rules directory and subdirectories
 include_smk_files('rules/')
 
+# Copy/report selection must run in the controller after checkpoint inputs resolve.
+localrules: select_viral_assembly
+
 ### Global rules
 # Assembly rules
 rule corrected_assembly_all_phages:
