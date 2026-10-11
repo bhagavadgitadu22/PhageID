@@ -36,16 +36,20 @@ class AutocyclerTests(unittest.TestCase):
                 wildcards=SimpleNamespace(candidate_assembler='flye'),threads=1,log=quote(p/'candidate.log'))
             subprocess.run(['bash','-euo','pipefail','-c',candidate],env=env,check=True)
             self.assertEqual((p/'candidate/status.txt').read_text(),'failed\n')
-            self.assertEqual(json.loads((p/'candidate.log.attempt.json').read_text())['Assembly_outcome'],'input_rejected')
+            self.assertEqual(json.loads((p/'candidate.log.attempt.json').read_text())['Assembly_outcome'],'assembler_failed')
             # No candidates is an assessed input limitation, so selection can try all reads.
             (p/'candidates/assemblies').mkdir(parents=True)
             subprocess.run([sys.executable,str(ROOT/'workflow/scripts/run_assembly_attempt.py'),
                 '--assembly',str(p/'consensus.fasta'),'--status',str(p/'status'),'--log',str(p/'consensus.log'),'--',
                 'bash',str(ROOT/'workflow/scripts/autocycler_consensus.sh'),str(p/'work'),str(p/'candidates'),str(p/'reads.fastq'),'1',str(p/'consensus.fasta')],check=True)
             self.assertEqual((p/'status').read_text(),'failed\n')
-            self.assertEqual(json.loads((p/'consensus.log.attempt.json').read_text())['Assembly_outcome'],'input_rejected')
-            # Unexpected subsampling errors still stop the job and clear the old rejection marker.
+            self.assertEqual(json.loads((p/'consensus.log.attempt.json').read_text())['Assembly_outcome'],'assembler_failed')
+            # Ordinary subsampling errors also allow rescue without message parsing.
             executable.write_text('#!/bin/sh\necho "Unexpected error"\nexit 1\n')
+            result=subprocess.run(['bash','-euo','pipefail','-c',command],env=env)
+            self.assertEqual(result.returncode,0)
+            self.assertTrue((p/'subsets/input_rejected.txt').exists())
+            executable.write_text('#!/bin/sh\nexit 137\n')
             result=subprocess.run(['bash','-euo','pipefail','-c',command],env=env)
             self.assertNotEqual(result.returncode,0)
             self.assertFalse((p/'subsets/input_rejected.txt').exists())
@@ -90,7 +94,7 @@ if step=='combine':
             self.assertEqual((p/'status').read_text().strip(),'failed')
             self.assertEqual((p/'assembly.fa').read_text(),'')
 
-    def test_candidate_execution_errors_are_not_collected_as_assessed_failures(self):
+    def test_candidate_ordinary_failures_allow_consensus(self):
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)
             subsets=p/'subsets';subsets.mkdir()
@@ -117,15 +121,15 @@ Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
             jobs=[]
             for assembler in ['canu','flye','metamdbg','miniasm','necat','nextdenovo','plassembler','raven']:
                 output=p/'jobs'/assembler/'sample_01'
-                if assembler != 'flye': jobs.append(output)
+                jobs.append(output)
                 rendered=command.replace(':q}', '}').format(
                     input=SimpleNamespace(genome_size=quote(p/'size')),
                     output=quote(output),params=SimpleNamespace(read_type='ont_r10',reads=quote(subsets/'sample_01.fastq'),plassembler_db=quote(p/'database')),
                     wildcards=SimpleNamespace(candidate_assembler=assembler),threads=2,log=quote(p/f'{assembler}.log'))
                 result=subprocess.run(['bash','-euo','pipefail','-c',rendered],env=env,capture_output=True)
                 if assembler == 'flye':
-                    self.assertNotEqual(result.returncode,0)
-                    self.assertFalse((output/'status.txt').exists())
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual((output/'status.txt').read_text().strip(),'failed')
                 else:
                     self.assertEqual(result.returncode,0,result.stderr)
                     self.assertEqual((output/'status.txt').read_text().strip(),'success')

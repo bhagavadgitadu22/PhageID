@@ -12,7 +12,7 @@ def main():
     for name in ['assembly', 'status', 'log']:
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--extra-output', action='append', default=[])
-    parser.add_argument('--input-rejection', choices=['reads too shallow to subset'])
+    parser.add_argument('--input-rejection', help='Skip assembly after a failed preprocessing attempt')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
@@ -35,7 +35,7 @@ def main():
         log_path.write_text('Assembly input rejected: ' + args.input_rejection + '\n')
         assembly.write_text('')
         status.write_text('failed\n')
-        record.update(Execution_status='completed', Assembly_outcome='input_rejected')
+        record.update(Execution_status='completed', Assembly_outcome='assembler_failed')
         save()
         return
     code = None
@@ -46,28 +46,21 @@ def main():
             log.write(f'\nAssembly command exit code: {code}\n')
         except OSError as error:
             log.write(f'\nCannot execute assembler: {error}\n')
-    text = log_path.read_text(errors='replace')
     success = (code == 0 and assembly.is_file() and assembly.stat().st_size > 0
                and all(Path(path).is_file() and Path(path).stat().st_size > 0 for path in args.extra_output))
-    # Exit 20 is reserved by our consensus script for completed QC with no usable cluster.
-    # Known SPAdes/Flye read rejections are assessed input limitations.
-    qc_failed = code == 20 and 'No clusters passed Autocycler QC.' in text
-    input_rejected = ((code == 64 and 'Invalid kmer coverage histogram' in text)
-                      or (code == 1 and 'No reads above minimum length threshold (' in text)
-                      or (code == 21 and 'Autocycler requires at least two successful input assemblies.' in text))
-    if 'SIGKILL' in text:
-        input_rejected = qc_failed = False
-    assessed_failure = qc_failed or input_rejected
+    # No tool-message parsing: ordinary nonzero exits allow rescue. Signal deaths
+    # and missing commands stay incomplete; Slurm status checks catch step OOMs.
+    interrupted = code is not None and (code < 0 or 128 < code <= 192)
+    execution_error = code is None or code in {126, 127} or interrupted
     record.update(Exit_code=code if code is not None else 'NA',
-                  Execution_status='completed' if success or assessed_failure else 'interrupted' if code == -9 or 'SIGKILL' in text else 'tool_error',
-                  Assembly_outcome='assembly_produced' if success else 'qc_failed' if qc_failed
-                  else 'input_rejected' if input_rejected else 'not_assessed')
+                  Execution_status='interrupted' if interrupted else 'tool_error' if execution_error else 'completed',
+                  Assembly_outcome='not_assessed' if execution_error else 'assembly_produced' if success else 'assembler_failed')
     save()
     if not success:
         assembly.unlink(missing_ok=True)
         for path in args.extra_output:
             Path(path).unlink(missing_ok=True)
-        if not assessed_failure:
+        if execution_error:
             raise SystemExit('Assembly execution failed; see ' + str(log_path))
         assembly.write_text('')
         for path in args.extra_output:

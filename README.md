@@ -27,11 +27,13 @@ snakemake --use-conda --cores 8 pipeline_comparison_phages     # add cross-sampl
 1. **Preprocess reads.** Combine FASTQ inputs, then trim long reads with Porechop or process short reads with fastp. If a bacterial host genome is supplied, remove host-mapping reads from either read type. The `assembly_read_status` checkpoint records read counts and the percentage removed..
 2. **Assemble.** Start with bacterial-free reads when available; otherwise use all preprocessed reads. Long-read samples use Flye after subsampling to approximately 1,000× (hypothesizing a 100 kbp assembly). Short-read-only samples use SPAdes (`--isolate`, single-end input). When both read columns are provided, the long-read route is used.
 3. **Assess each candidate.** Run geNomad, retain viral sequences of at least 2 kbp, prefix contig IDs with the sample name, correct likely concatemers and terminal repeats, then run CheckV. The `candidate_viral_quality` checkpoint makes these results available for assembly selection.
-4. **Rescue with autocycler.** If Flye produces no `Complete` or `High-quality` viral contig, run Autocycler on the same read set. By default, four subsets are assembled independently with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler and Raven, followed by consensus assembly. Select Autocycler if it contains retained viral contigs; otherwise retain Flye. 
+4. **Rescue with autocycler.** If Flye produces no `Complete` or `High-quality` viral contig, run Autocycler on the same read set. By default, four subsets are assembled independently with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler and Raven, followed by consensus assembly. Keep whichever assembly has the higher best-contig CheckV quality; ties retain Flye. 
 5. **Rescue with all reads.** If the filtered route yields no  `Complete` or `High-quality` viral contigs, repeat steps 2-4 with all reads (including bacterial reads) to allow host-matching prophage recovery. 
 6. **Selection policy** The assembly kept at the end is the one containing the highest CheckV quality viral contigs. Ties prefer filtered reads over all reads, then Flye over Autocycler.
 7. **Viral contig correction.** Concatemers and terminal repeats are corrected so that only one viral copy and one terminal repeat remain.
 8. **Report and gate downstream work.** Map all reads and bacterial-free reads onto the selected corrected viral contigs using theBIGbam `--circular`. Write per-sample contig and summary tables. The `viral_report_global` checkpoint concatenates them and allows only samples with retained viral contigs to enter annotation and comparison.
+
+For more details regarding the assembly and selection process, see the [assembly documentation](docs/assembly.md).
 
 ## After assembly
 

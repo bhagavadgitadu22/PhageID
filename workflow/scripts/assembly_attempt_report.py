@@ -5,31 +5,22 @@ import csv
 import json
 import subprocess
 from pathlib import Path
+from slurm_cluster_status import accounting_states
 
 FIELDS = ['Sample', 'Readset', 'Assembler', 'Subset', 'Execution_status', 'Assembly_outcome',
           'Exit_code', 'Slurm_job_id', 'Slurm_state', 'Log']
 FAILURES = {'OUT_OF_MEMORY': 'out_of_memory', 'TIMEOUT': 'timeout', 'NODE_FAIL': 'node_failure',
             'CANCELLED': 'cancelled', 'PREEMPTED': 'preempted', 'BOOT_FAIL': 'node_failure',
-            'FAILED': 'execution_failed'}
+            'FAILED': 'execution_failed', 'DEADLINE': 'timeout', 'REVOKED': 'cancelled'}
 
 
 def scheduler_states(ids):
     if not ids:
         return {}
     try:
-        result = subprocess.run(['sacct', '--jobs', ','.join(sorted(ids)), '--noheader',
-                                 '--parsable2', '--format=JobIDRaw,State'],
-                                capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.TimeoutExpired):
+        return accounting_states(ids)
+    except (OSError, subprocess.SubprocessError):
         return {}
-    if result.returncode:
-        return {}
-    states = {}
-    for line in result.stdout.splitlines():
-        fields = line.split('|')
-        if len(fields) >= 2 and fields[0] in ids:
-            states[fields[0]] = fields[1].split()[0].rstrip('+')
-    return states
 
 
 def summarize(results, output):
