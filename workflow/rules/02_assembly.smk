@@ -26,7 +26,7 @@ rule assembly_reads_flye:
     input: rules.subsample_reads_flye.output.reads
     conda: os.path.join(ENV_DIR, "flye.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_assembly_reads_flye.log")
-    threads: 8
+    threads: 20
     shell:
         """python ./scripts/run_assembly_attempt.py --assembly {output.assembly:q} --status {output.status:q} --log {log:q} \
             --extra-output {output.graph:q} --extra-output {output.info:q} -- \
@@ -39,7 +39,7 @@ rule assembly_reads_spades:
         status=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "spades", "assembly_status.txt")
     input: assembly_reads
     conda: os.path.join(ENV_DIR, "spades.yaml")
-    threads: 8
+    threads: 20
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_spades.log")
     shell:
         """python ./scripts/run_assembly_attempt.py --assembly {output.assembly:q} --status {output.status:q} --log {log:q} -- \

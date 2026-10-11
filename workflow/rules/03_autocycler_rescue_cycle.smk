@@ -4,7 +4,7 @@ rule autocycler_genome_size:
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "autocycler", "genome_size.txt")
     params: genome_size=str(config.get("autocycler_genome_size", "auto"))
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
-    threads: 8
+    threads: 20
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_genome_size.log")
     shell:
         """
@@ -31,7 +31,8 @@ rule autocycler_subsample:
         if ! autocycler subsample --reads {input.reads:q} --out_dir {output:q} --count {params.subset_count} --genome_size "$(cat {input.genome_size:q})" > {log:q} 2>&1; then
             mkdir -p {output:q}
             rm -f {output:q}/sample_*.fastq
-            echo "Subsampling failed; candidate jobs will record failed attempts." >> {log:q}
+            echo "Subsampling failed; stopping this execution." >> {log:q}
+            exit 1
         fi
         """
 
@@ -57,7 +58,7 @@ rule autocycler_candidate_assembly:
         plassembler_db="/work/river/Databases/plassembler_db",
         reads=lambda wc, input: os.path.join(input.subsets, f"sample_{wc.subset}.fastq")
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
-    threads: 8
+    threads: 20
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_{candidate_assembler}_{subset}.log")
     shell:
         """
@@ -68,13 +69,8 @@ rule autocycler_candidate_assembly:
         if [ {wildcards.candidate_assembler:q} = plassembler ]; then
             extra_args=(--args --no_chromosome)
         fi
-        if [ -s {params.reads:q} ] && autocycler helper {wildcards.candidate_assembler:q} --threads {threads} --reads {params.reads:q} --out_prefix {output:q}/assembly --genome_size "$(cat {input.genome_size:q})" --read_type {params.read_type:q} "${{extra_args[@]}}" > {log:q} 2>&1 && [ -s {output:q}/assembly.fasta ]; then
-            printf 'success\n' > {output:q}/status.txt
-        else
-            rm -f {output:q}/assembly.fasta
-            printf 'failed\n' > {output:q}/status.txt
-            echo "Candidate failed or subset unavailable; see {log}." | tee -a {log:q} >&2
-        fi
+        python ./scripts/run_assembly_attempt.py --assembly {output:q}/assembly.fasta --status {output:q}/status.txt --log {log:q} -- \
+            autocycler helper {wildcards.candidate_assembler:q} --threads {threads} --reads {params.reads:q} --out_prefix {output:q}/assembly --genome_size "$(cat {input.genome_size:q})" --read_type {params.read_type:q} "${{extra_args[@]}}"
         """
 
 # Wait for all attempts, then collect only successful FASTAs for consensus.
@@ -94,7 +90,7 @@ rule assembly_reads_autocycler:
         status=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "autocycler", "assembly_status.txt")
     params: work=lambda wc: os.path.join(RESULTS_DIR, wc.sample, "assembly_attempts", wc.readset, "autocycler", "consensus_work")
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
-    threads: 8
+    threads: 20
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_consensus.log")
     shell:
         """python ./scripts/run_assembly_attempt.py --assembly {output.assembly:q} --status {output.status:q} --log {log:q} -- \

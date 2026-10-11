@@ -20,7 +20,7 @@ autocycler cluster -a "$graph"
 clusters=("$graph"/clustering/qc_pass/cluster_*)
 if (( ${#clusters[@]} == 0 )); then
     echo "No clusters passed Autocycler QC." >&2
-    exit 1
+    exit 20
 fi
 for cluster in "${clusters[@]}"; do
     autocycler trim -c "$cluster" -t "$threads"

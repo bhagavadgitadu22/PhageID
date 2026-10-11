@@ -66,6 +66,7 @@ rule viral_report:
         assembler=rules.select_viral_assembly.output.assembler,
         status=rules.select_viral_assembly.output.status,
         read_stats=rules.select_viral_assembly.output.read_stats,
+        filter_report=rules.assembly_read_status.output,
         concatemer=rules.select_viral_assembly.output.concatemer_report,
         dtr=rules.select_viral_assembly.output.dtr_report,
         checkv=rules.select_viral_assembly.output.checkv_quality,
@@ -75,7 +76,7 @@ rule viral_report:
         summary=os.path.join(RESULTS_DIR, "{sample}", "viral_sample_report.tsv")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_report.log")
     shell:
-        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
+        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --filter-report {input.filter_report:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
 
 # Concatenate per-sample reports before selecting samples for annotation.
 checkpoint viral_report_global:
@@ -84,8 +85,10 @@ checkpoint viral_report_global:
         summaries=expand(rules.viral_report.output.summary, sample=PHAGES_LIST)
     output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
     params:
-        contig_header='Viral contig\tSample\tAssembler\tAssembly reads\tPercentage bacterial reads\tAll reads number\tReads used for assembly number\tTotal bp\tTotal corrected bp\tCoverage\tCoverage without bacteria\tFlye circularity\tNumber of concatemers broken\tDTR length removed\tCheckV gene count\tCheckV viral genes\tCheckV host genes\tCheckV quality\tMIUVIG quality\tCheckV completeness\tCheckV contamination\tgeNomad provirus\tgeNomad taxonomy',
-        sample_header='Sample\tViral contigs\tTotal bp\tTotal corrected bp\tStatus'
+        attempts_script=workflow.basedir + "/scripts/assembly_attempt_report.py",
+        results_dir=RESULTS_DIR,
+        contig_header='Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy',
+        sample_header='Sample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tViral_contigs\tTotal_bp\tTotal_corrected_bp\tStatus'
     log: os.path.join(RESULTS_DIR, "logs", "viral_report_global.log")
     shell:
         """
@@ -99,5 +102,6 @@ checkpoint viral_report_global:
             for file in {input.summaries:q}; do
                 awk 'FNR > 1' "$file" >> {output.report:q}/samples.tsv
             done
+            python {params.attempts_script:q} --results-dir {params.results_dir:q} --output {output.report:q}/assembly_attempts.tsv
         ) > {log:q} 2>&1
         """

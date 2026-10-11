@@ -17,12 +17,12 @@ class AssemblyFailureTests(unittest.TestCase):
             command = [sys.executable, str(WRAPPER), '--assembly', str(assembly),
                        '--status', str(status), '--log', str(log), '--extra-output', str(info), '--',
                        sys.executable, '-c',
-                       'import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(">partial\\nACGT\\n"); print("coverage error"); sys.exit(64)', str(assembly)]
+                       'import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(">partial\\nACGT\\n"); print("Invalid kmer coverage histogram"); sys.exit(64)', str(assembly)]
             subprocess.run(command, check=True)
             self.assertEqual(assembly.read_text(), '')
             self.assertEqual(info.read_text(), '')
             self.assertEqual(status.read_text(), 'failed\n')
-            self.assertIn('coverage error', log.read_text())
+            self.assertIn('Invalid kmer coverage histogram', log.read_text())
             self.assertIn('exit code: 64', log.read_text())
             command[-2] = 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(">c\\nACGT\\n"); pathlib.Path(sys.argv[1]).with_name("info").write_text("metadata")'
             subprocess.run(command, check=True)
@@ -32,10 +32,11 @@ class AssemblyFailureTests(unittest.TestCase):
     def test_missing_executable_is_failed_attempt(self):
         with tempfile.TemporaryDirectory() as folder:
             p = Path(folder)
-            subprocess.run([sys.executable, str(WRAPPER), '--assembly', str(p/'assembly'),
+            result = subprocess.run([sys.executable, str(WRAPPER), '--assembly', str(p/'assembly'),
                             '--status', str(p/'status'), '--log', str(p/'log'), '--',
-                            str(p/'missing_assembler')], check=True)
-            self.assertEqual((p/'status').read_text(), 'failed\n')
+                            str(p/'missing_assembler')], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((p/'status').exists())
             self.assertIn('Cannot execute assembler', (p/'log').read_text())
 
 

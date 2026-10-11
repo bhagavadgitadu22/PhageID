@@ -51,7 +51,7 @@ if step=='combine':
             self.assertEqual((p/'status').read_text().strip(),'failed')
             self.assertEqual((p/'assembly.fa').read_text(),'')
 
-    def test_candidate_failures_keep_successful_assemblies(self):
+    def test_candidate_execution_errors_are_not_collected_as_assessed_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)
             subsets=p/'subsets';subsets.mkdir()
@@ -72,25 +72,33 @@ Path(args[args.index('--out_prefix')+1]+'.fasta').write_text('>contig\nACGT\n')
 """)
             executable.chmod(0o755)
             command=SOURCE.split('rule autocycler_candidate_assembly:')[1].split('"""')[1]
+            command=command.replace('./scripts/',str(ROOT/'workflow/scripts')+'/')
             quote=lambda value: shlex.quote(str(value))
             env=dict(os.environ,PATH=str(p)+os.pathsep+os.environ['PATH'])
             jobs=[]
             for assembler in ['canu','flye','metamdbg','miniasm','necat','nextdenovo','plassembler','raven']:
                 output=p/'jobs'/assembler/'sample_01'
-                jobs.append(output)
+                if assembler != 'flye': jobs.append(output)
                 rendered=command.replace(':q}', '}').format(
                     input=SimpleNamespace(genome_size=quote(p/'size')),
                     output=quote(output),params=SimpleNamespace(read_type='ont_r10',reads=quote(subsets/'sample_01.fastq'),plassembler_db=quote(p/'database')),
                     wildcards=SimpleNamespace(candidate_assembler=assembler),threads=2,log=quote(p/f'{assembler}.log'))
-                subprocess.run(['bash','-euo','pipefail','-c',rendered],env=env,check=True,capture_output=True)
-                self.assertEqual((output/'status.txt').read_text().strip(),'failed' if assembler=='flye' else 'success')
+                result=subprocess.run(['bash','-euo','pipefail','-c',rendered],env=env,capture_output=True)
+                if assembler == 'flye':
+                    self.assertNotEqual(result.returncode,0)
+                    self.assertFalse((output/'status.txt').exists())
+                else:
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual((output/'status.txt').read_text().strip(),'success')
             import sys
             sys.path.insert(0,str(ROOT/'workflow/scripts'))
             from collect_autocycler_candidates import collect
             collect(jobs,p/'candidates')
             self.assertEqual(len(list((p/'candidates/assemblies').glob('*.fasta'))),7)
-            self.assertIn('failed',(p/'candidates/candidate_status.tsv').read_text())
-            collect([jobs[1]],p/'empty_candidates',allow_insufficient=True)
+            failed=p/'jobs/failed/sample_01'
+            failed.mkdir(parents=True)
+            (failed/'status.txt').write_text('failed\n')
+            collect([failed],p/'empty_candidates',allow_insufficient=True)
             self.assertEqual(list((p/'empty_candidates/assemblies').glob('*.fasta')),[])
             with self.assertRaisesRegex(ValueError,'multiple successful'):
-                collect([jobs[1]],p/'too_few')
+                collect([failed],p/'too_few')

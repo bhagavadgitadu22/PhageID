@@ -4,13 +4,13 @@ import argparse
 import csv
 from pathlib import Path
 
-CONTIG_FIELDS = ['Viral contig', 'Sample', 'Assembler', 'Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number', 'Total bp', 'Total corrected bp', 'Coverage', 'Coverage without bacteria', 'Flye circularity',
-                 'Number of concatemers broken', 'DTR length removed']
-ANNOTATION_FIELDS = ['CheckV gene count', 'CheckV viral genes', 'CheckV host genes',
-                     'CheckV quality', 'MIUVIG quality', 'CheckV completeness', 'CheckV contamination',
-                     'geNomad provirus', 'geNomad taxonomy']
+CONTIG_FIELDS = ['Viral_contig', 'Sample', 'Number_reads', 'Number_reads_without_host', 'Assembler', 'Assembly_method', 'Assembly_used_reads', 'Total_bp', 'Total_corrected_bp', 'Coverage', 'Coverage_without_bacteria', 'Flye_circularity',
+                 'Number_of_concatemers_broken', 'DTR_length_removed']
+ANNOTATION_FIELDS = ['CheckV_gene_count', 'CheckV_viral_genes', 'CheckV_host_genes',
+                     'CheckV_quality', 'MIUVIG_quality', 'CheckV_completeness', 'CheckV_contamination',
+                     'geNomad_provirus', 'geNomad_taxonomy']
 CONTIG_FIELDS += ANNOTATION_FIELDS
-SAMPLE_FIELDS = ['Sample', 'Viral contigs', 'Total bp', 'Total corrected bp', 'Status']
+SAMPLE_FIELDS = ['Sample', 'Number_reads', 'Number_reads_without_host', 'Assembler', 'Assembly_method', 'Assembly_used_reads', 'Viral_contigs', 'Total_bp', 'Total_corrected_bp', 'Status']
 
 def read_corrections(path):
     with open(path, newline='') as handle:
@@ -47,12 +47,17 @@ def fasta_lengths(path):
     return lengths
 
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None, assembly_status="success"):
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None, assembly_status="success", filter_report=None):
     read_fields = ['Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number']
     read_values = dict.fromkeys(read_fields, 'NA')
     if read_stats:
         with open(read_stats) as handle:
             read_values = next(csv.DictReader(handle, delimiter='\t'))
+    filtering = {}
+    if filter_report:
+        with open(filter_report) as handle:
+            filtering = next(csv.DictReader(handle, delimiter='\t'))
+    assembly_values = [read_values['All reads number'], filtering.get('Bacterial free reads', read_values.get('Bacterial free reads', 'NA')), assembler, read_values['Assembly reads'], read_values['Reads used for assembly number']]
     lengths = fasta_lengths(fasta)
     ids = set(lengths)
     concatemers = read_corrections(concatemer_report)
@@ -85,7 +90,7 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         float(metadata[2])  # Reject missing/malformed coverage rather than inventing a value.
         float(metadata[3])
         rows.append(dict(zip(CONTIG_FIELDS, [
-            contig, sample, assembler, *[read_values[field] for field in read_fields], original_length, corrected_length, metadata[2], metadata[3], circular,
+            contig, sample, *assembly_values, original_length, corrected_length, metadata[2], metadata[3], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
             int(dtr['original_length']) - int(dtr['corrected_length']),
         ])))
@@ -95,17 +100,19 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         add_quality_metadata(rows, sample, checkv, genomad)
     write_tsv(output, CONTIG_FIELDS, rows)
     if summary_output is not None:
-        write_tsv(summary_output, SAMPLE_FIELDS, [sample_summary(sample, rows, assembly_status)])
+        write_tsv(summary_output, SAMPLE_FIELDS, [sample_summary(sample, rows, assembly_status, assembly_values)])
 
 
-def sample_summary(sample, rows, assembly_status="success"):
+def sample_summary(sample, rows, assembly_status="success", assembly_values=None):
     if assembly_status not in {"success", "failed"}:
         raise ValueError(f'Invalid assembly status: {assembly_status}')
     if assembly_status == "failed" and rows:
         raise ValueError('Failed assembly cannot have viral contigs')
+    if assembly_values is None:
+        assembly_values = [rows[0].get(field, 'NA') if rows else 'NA' for field in CONTIG_FIELDS[2:7]]
     return dict(zip(SAMPLE_FIELDS, [
-        sample, len(rows), sum(int(row['Total bp']) for row in rows),
-        sum(int(row['Total corrected bp']) for row in rows),
+        sample, *assembly_values, len(rows), sum(int(row['Total_bp']) for row in rows),
+        sum(int(row['Total_corrected_bp']) for row in rows),
         'ready' if rows else 'assembly_failed' if assembly_status == 'failed' else 'no_viral_contigs',
     ]))
 
@@ -123,18 +130,18 @@ def add_quality_metadata(rows, sample, checkv, genomad):
         raise ValueError('Nonempty contig reports require CheckV and geNomad results')
     quality = indexed_tsv(checkv, 'contig_id')
     taxonomy = indexed_tsv(genomad, 'seq_name')
-    columns = {'CheckV gene count': 'gene_count', 'CheckV viral genes': 'viral_genes',
-               'CheckV host genes': 'host_genes', 'CheckV quality': 'checkv_quality',
-               'MIUVIG quality': 'miuvig_quality', 'CheckV completeness': 'completeness',
-               'CheckV contamination': 'contamination'}
+    columns = {'CheckV_gene_count': 'gene_count', 'CheckV_viral_genes': 'viral_genes',
+               'CheckV_host_genes': 'host_genes', 'CheckV_quality': 'checkv_quality',
+               'MIUVIG_quality': 'miuvig_quality', 'CheckV_completeness': 'completeness',
+               'CheckV_contamination': 'contamination'}
     for row in rows:
-        contig = row['Viral contig']
+        contig = row['Viral_contig']
         original = contig.removeprefix(sample + '_')
         if contig not in quality or original not in taxonomy:
             raise ValueError(f'Missing CheckV or geNomad results for {contig}')
         row.update({name: quality[contig][source] for name, source in columns.items()})
-        row['geNomad provirus'] = 'Yes' if taxonomy[original]['topology'] == 'Provirus' else 'No'
-        row['geNomad taxonomy'] = taxonomy[original]['taxonomy']
+        row['geNomad_provirus'] = 'Yes' if taxonomy[original]['topology'] == 'Provirus' else 'No'
+        row['geNomad_taxonomy'] = taxonomy[original]['taxonomy']
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -144,11 +151,12 @@ def main():
     parser.add_argument("--assembly-info", "--flye-info", dest="flye_info", required=True)
     parser.add_argument("--assembler", required=True)
     parser.add_argument("--read-stats", required=True)
+    parser.add_argument("--filter-report", required=True)
     parser.add_argument("--assembly-status", required=True)
     args = parser.parse_args()
     assembly_status = Path(args.assembly_status).read_text().strip()
     sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
-                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats, assembly_status)
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats, assembly_status, args.filter_report)
 
 
 if __name__ == '__main__':

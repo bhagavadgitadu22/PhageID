@@ -46,7 +46,7 @@ class ViralReportTests(unittest.TestCase):
             input=SimpleNamespace(contigs=shlex.join([str(report[1]) for report in reports]),
                                   summaries=shlex.join([str(report[2]) for report in reports])),
             output=SimpleNamespace(report=quote(output_dir)),
-            params=SimpleNamespace(contig_header=quote('\t'.join(module.CONTIG_FIELDS)),
+            params=SimpleNamespace(attempts_script=quote(ROOT/'workflow/scripts/assembly_attempt_report.py'), results_dir=quote(self.p/'results'), contig_header=quote('\t'.join(module.CONTIG_FIELDS)),
                                    sample_header=quote('\t'.join(module.SAMPLE_FIELDS))),
             log=quote(self.p/'global.log'))
         subprocess.run(['bash','-euo','pipefail','-c',command],check=True)
@@ -54,24 +54,43 @@ class ViralReportTests(unittest.TestCase):
     def report(self):
         module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv', summary_output=self.p/'summary.tsv')
 
+    def test_read_counts_in_both_reports_including_empty_samples(self):
+        stats=self.p/'read_stats.tsv'
+        filtering=self.p/'filter.tsv'
+        stats.write_text('Assembly reads\tPercentage bacterial reads\tAll reads number\tReads used for assembly number\nbacterial free\t20\t100\t30\n')
+        filtering.write_text('All reads number\tBacterial free reads\tPercentage bacterial reads\n100\t80\t20\n')
+        for empty in [False, True]:
+            if empty:
+                (self.p/'input.fa').write_text('')
+                write_csv(self.p/'concat.csv',[],list(self.concat[0]))
+                write_csv(self.p/'dtr.csv',[],list(self.dtr[0]))
+            module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv',summary_output=self.p/'summary.tsv',assembler='flye',read_stats=stats,filter_report=filtering)
+            summary=read_tsv(self.p/'summary.tsv')[0]
+            self.assertEqual(list(summary)[1:6], ['Number_reads','Number_reads_without_host','Assembler','Assembly_method','Assembly_used_reads'])
+            self.assertEqual([summary[key] for key in list(summary)[1:6]], ['100','80','flye','bacterial free','30'])
+            for row in read_tsv(self.p/'stats.tsv'):
+                self.assertEqual(list(row)[2:7], ['Number_reads','Number_reads_without_host','Assembler','Assembly_method','Assembly_used_reads'])
+                self.assertEqual([row[key] for key in list(row)[2:7]], ['100','80','flye','bacterial free','30'])
+                self.assertNotIn('Percentage bacterial reads', row)
+
     def test_failed_assembly_summary(self):
         row = module.sample_summary('failed', [], 'failed')
         self.assertEqual(row['Status'], 'assembly_failed')
-        self.assertEqual(row['Viral contigs'], 0)
+        self.assertEqual(row['Viral_contigs'], 0)
         self.assertEqual(module.sample_summary('empty', [])['Status'], 'no_viral_contigs')
 
     def test_metadata_original_and_corrected_lengths(self):
         self.report()
         rows=read_tsv(self.p/'stats.tsv')
-        self.assertEqual([row['Total bp'] for row in rows],['300','80'])
-        self.assertEqual([row['Total corrected bp'] for row in rows],['90','80'])
+        self.assertEqual([row['Total_bp'] for row in rows],['300','80'])
+        self.assertEqual([row['Total_corrected_bp'] for row in rows],['90','80'])
         self.assertEqual(rows[0]['Assembler'],'flye')
         self.assertEqual(rows[0]['Coverage'],'42')
-        self.assertEqual(rows[0]['Coverage without bacteria'],'30')
-        self.assertEqual(rows[0]['Flye circularity'],'Y')
-        self.assertEqual(rows[0]['Number of concatemers broken'],'2')
-        self.assertEqual(rows[0]['DTR length removed'],'10')
-        self.assertEqual(rows[1]['DTR length removed'],'0')
+        self.assertEqual(rows[0]['Coverage_without_bacteria'],'30')
+        self.assertEqual(rows[0]['Flye_circularity'],'Y')
+        self.assertEqual(rows[0]['Number_of_concatemers_broken'],'2')
+        self.assertEqual(rows[0]['DTR_length_removed'],'10')
+        self.assertEqual(rows[1]['DTR_length_removed'],'0')
 
     def test_summary_keeps_empty_samples_and_sums_both_lengths(self):
         self.report()
@@ -79,8 +98,8 @@ class ViralReportTests(unittest.TestCase):
         module.write_tsv(self.p/'empty_summary.tsv',module.SAMPLE_FIELDS,[module.sample_summary('empty',[])])
         self.concatenate_reports([('sample_with_underscores',self.p/'stats.tsv',self.p/'summary.tsv'),('empty',self.p/'empty.tsv',self.p/'empty_summary.tsv')],self.p/'global')
         rows=read_tsv(self.p/'global/samples.tsv')
-        self.assertEqual((rows[0]['Total bp'],rows[0]['Total corrected bp']),('380','170'))
-        self.assertEqual(rows[1],dict(zip(module.SAMPLE_FIELDS,['empty','0','0','0','no_viral_contigs'])))
+        self.assertEqual((rows[0]['Total_bp'],rows[0]['Total_corrected_bp']),('380','170'))
+        self.assertEqual(rows[1],dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs'])))
         self.assertEqual(len(read_tsv(self.p/'global/viral_contigs.tsv')),2)
 
     def test_empty_corrected_fasta_has_header_only_report(self):
@@ -98,14 +117,14 @@ class ViralReportTests(unittest.TestCase):
         module.write_tsv(self.p/'genomad.tsv', ['seq_name','topology','taxonomy'], [dict(seq_name='contig_1',topology='Provirus',taxonomy='Viruses;Caudoviricetes'),dict(seq_name='contig_2',topology='DTR',taxonomy='Unclassified')])
         module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',self.p/'enriched.tsv',self.p/'checkv.tsv',self.p/'genomad.tsv',self.p/'enriched_summary.tsv')
         rows=read_tsv(self.p/'enriched.tsv')
-        self.assertEqual([row['geNomad provirus'] for row in rows], ['Yes','No'])
-        self.assertEqual(rows[0]['CheckV completeness'], '95.2')
-        self.assertEqual(rows[0]['CheckV contamination'], '3.4')
+        self.assertEqual([row['geNomad_provirus'] for row in rows], ['Yes','No'])
+        self.assertEqual(rows[0]['CheckV_completeness'], '95.2')
+        self.assertEqual(rows[0]['CheckV_contamination'], '3.4')
         fields = list(rows[0])
-        self.assertEqual(fields[fields.index('CheckV completeness') + 1], 'CheckV contamination')
+        self.assertEqual(fields[fields.index('CheckV_completeness') + 1], 'CheckV_contamination')
         self.assertNotIn('CheckV completeness_method', fields)
-        self.assertEqual(rows[0]['CheckV gene count'], '10')
-        self.assertEqual(rows[0]['geNomad taxonomy'], 'Viruses;Caudoviricetes')
+        self.assertEqual(rows[0]['CheckV_gene_count'], '10')
+        self.assertEqual(rows[0]['geNomad_taxonomy'], 'Viruses;Caudoviricetes')
         self.concatenate_reports([('sample_with_underscores',self.p/'enriched.tsv',self.p/'enriched_summary.tsv')],self.p/'enriched_global')
         self.assertEqual(read_tsv(self.p/'enriched_global/viral_contigs.tsv'), rows)
 
@@ -119,7 +138,7 @@ class ViralReportTests(unittest.TestCase):
         (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tflye_circularity\n'+name+'\t100\t42\t30\tNA\n')
         self.report()
         row=read_tsv(self.p/'stats.tsv')[0]
-        self.assertEqual((row['Total bp'],row['Coverage'],row['Flye circularity']),('100','42','NA'))
+        self.assertEqual((row['Total_bp'],row['Coverage'],row['Flye_circularity']),('100','42','NA'))
 
     def test_empty_enrichment_needs_no_annotations(self):
         module.write_tsv(self.p/'empty.tsv',module.CONTIG_FIELDS,[])
@@ -175,7 +194,7 @@ class ViralReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'No assembly metadata'): self.report()
 
     def test_checkpoint_filters_targets_and_skips_all_empty_comparison(self):
-        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['ready','1','10','10','ready'])),dict(zip(module.SAMPLE_FIELDS,['empty','0','0','0','no_viral_contigs']))])
+        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['ready','100','90','flye','bacterial free','80','1','10','10','ready'])),dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
         checkpoint=SimpleNamespace(get=lambda: SimpleNamespace(output=SimpleNamespace(report=str(self.p))))
         def expand(patterns, sample):
             patterns=[patterns] if isinstance(patterns,str) else patterns
@@ -186,7 +205,7 @@ class ViralReportTests(unittest.TestCase):
         exec(source[source.index('def active_viral_samples'):source.index('### Rules to include')],namespace)
         self.assertEqual(namespace['active_sample_files']('{sample}/annotation')(None),['ready/annotation'])
         self.assertEqual(namespace['per_sample_pipeline_inputs'](SimpleNamespace(sample='empty')),[str(self.p)])
-        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['empty','0','0','0','no_viral_contigs']))])
+        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
         self.assertEqual(namespace['comparison_pipeline_inputs'](None),[str(self.p)])
 
 
