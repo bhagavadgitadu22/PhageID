@@ -42,9 +42,12 @@ def main():
     success = (code == 0 and assembly.is_file() and assembly.stat().st_size > 0
                and all(Path(path).is_file() and Path(path).stat().st_size > 0 for path in args.extra_output))
     # Exit 20 is reserved by our consensus script for completed QC with no usable cluster.
-    # SPAdes' known coverage-histogram rejection is an assessed input limitation.
+    # Known SPAdes/Flye read rejections are assessed input limitations.
     qc_failed = code == 20 and 'No clusters passed Autocycler QC.' in text
-    input_rejected = code == 64 and 'Invalid kmer coverage histogram' in text
+    input_rejected = ((code == 64 and 'Invalid kmer coverage histogram' in text)
+                      or (code == 1 and 'No reads above minimum length threshold (' in text))
+    if 'SIGKILL' in text:
+        input_rejected = qc_failed = False
     assessed_failure = qc_failed or input_rejected
     record.update(Exit_code=code if code is not None else 'NA',
                   Execution_status='completed' if success or assessed_failure else 'interrupted' if code == -9 or 'SIGKILL' in text else 'tool_error',

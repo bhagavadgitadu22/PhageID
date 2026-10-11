@@ -12,7 +12,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'workflow/scripts'))
 import assembly_attempt_report as report
 
-
 class AttemptDiagnosticTests(unittest.TestCase):
     def run_attempt(self, root, program):
         assembly=root/'sample/assembly_attempts/filtered/flye/assembly.fasta'
@@ -40,6 +39,24 @@ class AttemptDiagnosticTests(unittest.TestCase):
                     row=next(csv.DictReader(handle,delimiter='\t'))
                 self.assertEqual(row['Execution_status'],expected)
                 self.assertEqual(row['Sample'],'sample')
+
+    def test_flye_short_read_rejection_allows_rescue(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result,status,record=self.run_attempt(Path(directory),
+                'import sys; print("ERROR: No reads above minimum length threshold (1000)"); sys.exit(1)')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(status.read_text(),'failed\n')
+            self.assertEqual(status.with_name('assembly.fasta').read_text(),'')
+            self.assertEqual(record['Execution_status'],'completed')
+            self.assertEqual(record['Assembly_outcome'],'input_rejected')
+
+    def test_flye_rejection_does_not_mask_interruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result,status,record=self.run_attempt(Path(directory),
+                'import sys; print("No reads above minimum length threshold (1000) SIGKILL"); sys.exit(1)')
+            self.assertNotEqual(result.returncode,0)
+            self.assertFalse(status.exists())
+            self.assertEqual(record['Execution_status'],'interrupted')
 
     def test_unknown_error_is_not_biological_failure(self):
         with tempfile.TemporaryDirectory() as directory:
