@@ -28,11 +28,16 @@ rule autocycler_subsample:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_autocycler_subsample.log")
     shell:
         """
+        rm -f {output:q}/input_rejected.txt
         if ! autocycler subsample --reads {input.reads:q} --out_dir {output:q} --count {params.subset_count} --genome_size "$(cat {input.genome_size:q})" > {log:q} 2>&1; then
             mkdir -p {output:q}
             rm -f {output:q}/sample_*.fastq
-            echo "Subsampling failed; stopping this execution." >> {log:q}
-            exit 1
+            if grep -Fq "Error: input reads are too shallow to subset" {log:q}; then
+                printf 'reads too shallow to subset\n' > {output:q}/input_rejected.txt
+            else
+                echo "Subsampling failed; stopping this execution." >> {log:q}
+                exit 1
+            fi
         fi
         """
 
@@ -69,8 +74,12 @@ rule autocycler_candidate_assembly:
         if [ {wildcards.candidate_assembler:q} = plassembler ]; then
             extra_args=(--args --no_chromosome)
         fi
+        if [ -f "$(dirname {params.reads:q})/input_rejected.txt" ]; then
+            python ./scripts/run_assembly_attempt.py --assembly {output:q}/assembly.fasta --status {output:q}/status.txt --log {log:q} --input-rejection "reads too shallow to subset"
+        else
         python ./scripts/run_assembly_attempt.py --assembly {output:q}/assembly.fasta --status {output:q}/status.txt --log {log:q} -- \
             autocycler helper {wildcards.candidate_assembler:q} --threads {threads} --reads {params.reads:q} --out_prefix {output:q}/assembly --genome_size "$(cat {input.genome_size:q})" --read_type {params.read_type:q} "${{extra_args[@]}}"
+        fi
         """
 
 # Wait for all attempts, then collect only successful FASTAs for consensus.

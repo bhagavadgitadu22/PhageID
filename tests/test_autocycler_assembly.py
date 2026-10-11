@@ -11,6 +11,45 @@ SOURCE='\n'.join(path.read_text() for path in sorted((ROOT/'workflow/rules').glo
 
 
 class AutocyclerTests(unittest.TestCase):
+    def test_shallow_subsampling_skips_candidates_and_allows_rescue(self):
+        import json
+        import sys
+        with tempfile.TemporaryDirectory() as directory:
+            p=Path(directory)
+            (p/'size').write_text('100000\n')
+            executable=p/'autocycler'
+            executable.write_text('#!/bin/sh\necho "Error: input reads are too shallow to subset"\nexit 1\n')
+            executable.chmod(0o755)
+            env=dict(os.environ,PATH=str(p)+os.pathsep+os.environ['PATH'])
+            quote=lambda value: shlex.quote(str(value))
+            command=SOURCE.split('rule autocycler_subsample:')[1].split('"""')[1]
+            command=command.replace(':q}', '}').format(
+                input=SimpleNamespace(reads=quote(p/'reads.fastq'),genome_size=quote(p/'size')),
+                output=quote(p/'subsets'),params=SimpleNamespace(subset_count=4),log=quote(p/'subsample.log'))
+            subprocess.run(['bash','-euo','pipefail','-c',command],env=env,check=True)
+            self.assertTrue((p/'subsets/input_rejected.txt').exists())
+            candidate=SOURCE.split('rule autocycler_candidate_assembly:')[1].split('"""')[1]
+            candidate=candidate.replace('./scripts/',str(ROOT/'workflow/scripts')+'/')
+            candidate=candidate.replace(':q}', '}').format(
+                params=SimpleNamespace(plassembler_db=quote(p/'db'),read_type='ont_r10',reads=quote(p/'subsets/sample_01.fastq')),
+                input=SimpleNamespace(genome_size=quote(p/'size')),output=quote(p/'candidate'),
+                wildcards=SimpleNamespace(candidate_assembler='flye'),threads=1,log=quote(p/'candidate.log'))
+            subprocess.run(['bash','-euo','pipefail','-c',candidate],env=env,check=True)
+            self.assertEqual((p/'candidate/status.txt').read_text(),'failed\n')
+            self.assertEqual(json.loads((p/'candidate.log.attempt.json').read_text())['Assembly_outcome'],'input_rejected')
+            # No candidates is an assessed input limitation, so selection can try all reads.
+            (p/'candidates/assemblies').mkdir(parents=True)
+            subprocess.run([sys.executable,str(ROOT/'workflow/scripts/run_assembly_attempt.py'),
+                '--assembly',str(p/'consensus.fasta'),'--status',str(p/'status'),'--log',str(p/'consensus.log'),'--',
+                'bash',str(ROOT/'workflow/scripts/autocycler_consensus.sh'),str(p/'work'),str(p/'candidates'),str(p/'reads.fastq'),'1',str(p/'consensus.fasta')],check=True)
+            self.assertEqual((p/'status').read_text(),'failed\n')
+            self.assertEqual(json.loads((p/'consensus.log.attempt.json').read_text())['Assembly_outcome'],'input_rejected')
+            # Unexpected subsampling errors still stop the job and clear the old rejection marker.
+            executable.write_text('#!/bin/sh\necho "Unexpected error"\nexit 1\n')
+            result=subprocess.run(['bash','-euo','pipefail','-c',command],env=env)
+            self.assertNotEqual(result.returncode,0)
+            self.assertFalse((p/'subsets/input_rejected.txt').exists())
+
     def test_consensus_steps_and_qc_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)

@@ -12,10 +12,11 @@ def main():
     for name in ['assembly', 'status', 'log']:
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--extra-output', action='append', default=[])
+    parser.add_argument('--input-rejection', choices=['reads too shallow to subset'])
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
-    if not command:
+    if not command and not args.input_rejection:
         parser.error('Missing assembler command')
     assembly, status, log_path = map(Path, [args.assembly, args.status, args.log])
     assembly.parent.mkdir(parents=True, exist_ok=True)
@@ -30,6 +31,13 @@ def main():
         report.write_text(json.dumps(record, indent=2) + '\n')
     # Persist before execution: whole-job kills cannot run cleanup code.
     save()
+    if args.input_rejection:
+        log_path.write_text('Assembly input rejected: ' + args.input_rejection + '\n')
+        assembly.write_text('')
+        status.write_text('failed\n')
+        record.update(Execution_status='completed', Assembly_outcome='input_rejected')
+        save()
+        return
     code = None
     with log_path.open('w') as log:
         try:
@@ -45,7 +53,8 @@ def main():
     # Known SPAdes/Flye read rejections are assessed input limitations.
     qc_failed = code == 20 and 'No clusters passed Autocycler QC.' in text
     input_rejected = ((code == 64 and 'Invalid kmer coverage histogram' in text)
-                      or (code == 1 and 'No reads above minimum length threshold (' in text))
+                      or (code == 1 and 'No reads above minimum length threshold (' in text)
+                      or (code == 21 and 'Autocycler requires at least two successful input assemblies.' in text))
     if 'SIGKILL' in text:
         input_rejected = qc_failed = False
     assessed_failure = qc_failed or input_rejected

@@ -9,7 +9,7 @@ shopt -s nullglob
 assemblies=("$candidates"/assemblies/*.fasta)
 if (( ${#assemblies[@]} < 2 )); then
     echo "Autocycler requires at least two successful input assemblies." >&2
-    exit 1
+    exit 21
 fi
 mkdir -p "$work"
 attempt=$(mktemp -d "$work/attempt_XXXXXX")
