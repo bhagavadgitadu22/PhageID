@@ -9,7 +9,6 @@ FAILURES = {'OUT_OF_MEMORY', 'TIMEOUT', 'NODE_FAIL', 'BOOT_FAIL', 'CANCELLED',
 PRIORITY = ['OUT_OF_MEMORY', 'TIMEOUT', 'NODE_FAIL', 'BOOT_FAIL', 'CANCELLED',
             'PREEMPTED', 'DEADLINE', 'REVOKED', 'FAILED']
 
-
 def accounting_states(ids):
     result = subprocess.run(['sacct', '--jobs', ','.join(sorted(ids)), '--noheader',
                              '--parsable2', '--format=JobIDRaw,State'],
@@ -32,7 +31,6 @@ def accounting_states(ids):
             primary[job] = failure
     return primary
 
-
 def job_status(job_id):
     state = accounting_states({job_id}).get(job_id)
     if state in FAILURES:
@@ -41,7 +39,6 @@ def job_status(job_id):
         return 'success'
     # Accounting can lag behind submission; unknown state is not success.
     return 'running'
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

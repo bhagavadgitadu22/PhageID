@@ -13,7 +13,6 @@ FAILURES = {'OUT_OF_MEMORY': 'out_of_memory', 'TIMEOUT': 'timeout', 'NODE_FAIL':
             'CANCELLED': 'cancelled', 'PREEMPTED': 'preempted', 'BOOT_FAIL': 'node_failure',
             'FAILED': 'execution_failed', 'DEADLINE': 'timeout', 'REVOKED': 'cancelled'}
 
-
 def scheduler_states(ids):
     if not ids:
         return {}
@@ -21,7 +20,6 @@ def scheduler_states(ids):
         return accounting_states(ids)
     except (OSError, subprocess.SubprocessError):
         return {}
-
 
 def summarize(results, output):
     results = Path(results).resolve()
@@ -59,7 +57,6 @@ def summarize(results, output):
         writer = csv.DictWriter(handle, fieldnames=FIELDS, delimiter='\t', lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

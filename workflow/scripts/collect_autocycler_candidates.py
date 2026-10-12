@@ -5,7 +5,6 @@ import csv
 import shutil
 from pathlib import Path
 
-
 def collect(candidates, output, allow_insufficient=False):
     output = Path(output)
     assemblies = output / 'assemblies'
@@ -36,7 +35,6 @@ def collect(candidates, output, allow_insufficient=False):
     if successes < 2 and not allow_insufficient:
         raise ValueError(f'Autocycler requires multiple successful input assemblies; got {successes}')
 
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--candidates', nargs='+', required=True)
@@ -44,7 +42,6 @@ def main():
     parser.add_argument('--allow-insufficient', action='store_true')
     args = parser.parse_args()
     collect(args.candidates, args.output, args.allow_insufficient)
-
 
 if __name__ == '__main__':
     main()

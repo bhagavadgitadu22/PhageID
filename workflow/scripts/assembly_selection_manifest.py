@@ -23,14 +23,12 @@ SOURCE_FILES = {
 }
 DESTINATION_KEYS = set(SOURCE_FILES) | {'flye_info', 'assembler', 'read_stats'}
 
-
 def table(path, columns, delimiter='\t'):
     with open(path, newline='') as handle:
         reader = csv.DictReader(handle, delimiter=delimiter)
         if not set(columns) <= set(reader.fieldnames or []):
             raise ValueError(f'Invalid table header: {path}; expected {columns}')
         return list(reader)
-
 
 def validate(manifest):
     sample, assembler, readset = (manifest[key] for key in ['sample', 'assembler', 'readset'])
@@ -98,7 +96,6 @@ def validate(manifest):
         raise ValueError('Selected assembly reads are empty')
     return sources
 
-
 def create(sample, inputs, output):
     paths = [Path(path).resolve() for path in inputs]
     assemblies = [path for path in paths if path.name == 'assembly.fasta']
@@ -119,7 +116,6 @@ def create(sample, inputs, output):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, indent=2) + '\n')
-
 
 def publish(sample, manifest_path, destinations):
     manifest = json.loads(Path(manifest_path).read_text())
@@ -143,7 +139,6 @@ def publish(sample, manifest_path, destinations):
         Path(destinations['assembler']).write_text(manifest['assembler'] + '\n')
         shutil.copyfile(read_stats, destinations['read_stats'])
 
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest='mode', required=True)
@@ -163,7 +158,6 @@ def main():
         if len(destinations) != len(args.destination):
             parser.error('Duplicate destination keys')
         publish(args.sample, args.manifest, destinations)
-
 
 if __name__ == '__main__':
     main()

@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 from Bio import SeqIO
 
-PATTERN = re.compile(r"(.*?)_CDS_\[(complement\()?(\d+)\.\.(\d+)(\))?\]$")
+PATTERN = re.compile(r"(.*?)_CDS_\[(complement\()?([<>]?)(\d+)\.\.([<>]?)(\d+)(\))?\]$")
 
 
 def convert(genes, fasta, output):
@@ -27,7 +27,7 @@ def convert(genes, fasta, output):
                 raise ValueError(f"{genes}:{line}: unrecognized protein ID {row[0]!r}")
             if len(row) < 5:
                 raise ValueError(f"{genes}:{line}: expected at least five columns")
-            contig, complement, start, end, closing = match.groups()
+            contig, complement, start_marker, start, end_marker, end, closing = match.groups()
             if bool(complement) != bool(closing):
                 raise ValueError(f"{genes}:{line}: malformed complement coordinates")
             start, end = int(start), int(end)
@@ -35,10 +35,14 @@ def convert(genes, fasta, output):
                 raise ValueError(f"{genes}:{line}: unknown contig or invalid coordinates")
             category = row[4].replace("DNA, RNA and nucleotide metabolism", "DNA").replace("moron, auxiliary metabolic gene and host takeover", "moron")
             attributes = {"ID": row[0], "phrog": row[2], "function": category, "product": row[3]}
+            partial = bool(start_marker or end_marker)
+            if partial:
+                attributes["partial"] = "true"
             attrs = ";".join(f"{key}={quote(value, safe=':_-.')}" for key, value in attributes.items())
-            # Each Genotate prediction is a complete CDS; genomic reading frame
-            # belongs in plotting logic, not the GFF phase (bases to skip).
-            features[contig].append("\t".join([contig, "genotate_0.15", "CDS", str(start), str(end), ".", "-" if complement else "+", "0", attrs]))
+            # A partial 5-prime boundary does not establish a CDS phase.
+            partial_start = bool(end_marker if complement else start_marker)
+            phase = "." if partial_start else "0"
+            features[contig].append("\t".join([contig, "genotate_0.15", "CDS", str(start), str(end), ".", "-" if complement else "+", phase, attrs]))
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w") as handle:
         handle.write("##gff-version 3\n")

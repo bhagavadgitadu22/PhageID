@@ -46,6 +46,34 @@ class MultiContigTests(unittest.TestCase):
         self.assertEqual(features['b'][0].location.strand, -1)
         self.assertIn('##sequence-region no_genes 1 4', self.gff.read_text())
 
+    def test_partial_boundaries_on_both_strands(self):
+        cases = [('a_CDS_[<1..9]', '+', '.'),
+                 ('a_CDS_[1..>9]', '+', '0'),
+                 ('b_CDS_[complement(<1..18)]', '-', '0'),
+                 ('b_CDS_[complement(10..>18)]', '-', '.'),
+                 ('b_CDS_[complement(<1..>18)]', '-', '.')]
+        with self.genes.open('w', newline='') as handle:
+            writer = csv.writer(handle, delimiter='\t')
+            for identifier, _, _ in cases:
+                writer.writerow([identifier, 9, 1, 'capsid protein', 'head and packaging'])
+        converter.convert(self.genes, self.fasta, self.gff)
+        lines = [line.split('\t') for line in self.gff.read_text().split('##FASTA')[0].splitlines() if not line.startswith('#')]
+        self.assertEqual(len(lines), len(cases))
+        for fields, (identifier, strand, phase) in zip(lines, cases):
+            self.assertEqual(fields[6:8], [strand, phase])
+            self.assertIn('partial=true', fields[8])
+            from urllib.parse import unquote
+            self.assertIn('ID=' + identifier, unquote(fields[8]))
+        features = plotter.read_features(self.gff, {'a': 100, 'b': 200, 'no_genes': 4})
+        self.assertEqual(features['b'][0].location.start, 0)
+        self.assertEqual(features['b'][0].location.end, 18)
+
+    def test_partial_coordinates_still_require_valid_bounds_and_syntax(self):
+        for identifier in ['a_CDS_[<0..9]', 'a_CDS_[1..>101]', 'a_CDS_[complement(<1..9]', 'a_CDS_[<1..9)]']:
+            self.genes.write_text(identifier + '\t9\t1\tx\ttail\n')
+            with self.subTest(identifier=identifier), self.assertRaises(ValueError):
+                converter.convert(self.genes, self.fasta, self.gff)
+
     def test_unknown_contig_is_rejected(self):
         self.genes.write_text('missing_CDS_[1..3]\t3\t1\tx\ttail\n')
         with self.assertRaisesRegex(ValueError, 'unknown contig'):

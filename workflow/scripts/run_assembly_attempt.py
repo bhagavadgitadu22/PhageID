@@ -6,7 +6,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['assembly', 'status', 'log']:
