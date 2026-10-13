@@ -5,6 +5,7 @@ import argparse
 import csv
 import logging
 import re
+from itertools import zip_longest
 from pathlib import Path
 
 ID_COLUMNS = (
@@ -31,28 +32,43 @@ def delimiter_for(path):
     except csv.Error:
         return "\t" if Path(path).suffix.lower() in {".tsv", ".tab"} else ","
 
+def fasta_ids(path):
+    with open(path) as fasta:
+        for line in fasta:
+            if line.startswith(">"):
+                fields = line[1:].split()
+                if not fields:
+                    raise ValueError(f"Empty FASTA header in {path}")
+                yield fields[0]
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--id-column", help="Column containing the Pharokka/Bakta protein ID (auto-detected by default)")
     parser.add_argument("--checkamg-pharokka-fasta", help="Map raw CheckAMG IDs to actual Pharokka FASTA IDs and retain checkamg_id")
+    parser.add_argument("--checkamg-raw-fasta", help="Raw Pharokka FASTA used as CheckAMG input, in the same record order as the annotated FASTA")
     args = parser.parse_args()
 
     pharokka_ids = {}
+    if bool(args.checkamg_pharokka_fasta) != bool(args.checkamg_raw_fasta):
+        parser.error("--checkamg-pharokka-fasta and --checkamg-raw-fasta must be used together")
     if args.checkamg_pharokka_fasta:
-        with open(args.checkamg_pharokka_fasta) as fasta:
-            for line in fasta:
-                if not line.startswith(">"):
-                    continue
-                protein_id = line[1:].split()[0]
-                match = re.fullmatch(r"(.+)_CDS_(\d+)", protein_id)
-                if not match:
-                    raise ValueError(f"Unexpected Pharokka protein ID: {protein_id!r}")
-                raw_id = f"{match[1]}_{int(match[2])}"
-                if raw_id in pharokka_ids:
-                    raise ValueError(f"Ambiguous Pharokka mapping for {raw_id!r}")
-                pharokka_ids[raw_id] = protein_id
+        processed_ids = set()
+        for index, (raw_id, protein_id) in enumerate(
+            zip_longest(fasta_ids(args.checkamg_raw_fasta), fasta_ids(args.checkamg_pharokka_fasta)),
+            start=1,
+        ):
+            if raw_id is None or protein_id is None:
+                raise ValueError(f"Raw and annotated Pharokka FASTA record counts differ at record {index}")
+            if not re.fullmatch(r".+_CDS_\d+", protein_id):
+                raise ValueError(f"Unexpected Pharokka protein ID: {protein_id!r}")
+            if raw_id in pharokka_ids:
+                raise ValueError(f"Duplicate raw Pharokka protein ID: {raw_id!r}")
+            if protein_id in processed_ids:
+                raise ValueError(f"Duplicate annotated Pharokka protein ID: {protein_id!r}")
+            pharokka_ids[raw_id] = protein_id
+            processed_ids.add(protein_id)
         if not pharokka_ids:
             raise ValueError("No Pharokka protein IDs found in FASTA")
 

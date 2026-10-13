@@ -13,13 +13,14 @@ rule reformat_checkamg_results:
     output: os.path.join(RESULTS_DIR, "{sample}", "checkamg", "results", "final_results_reformatted.csv")
     input:
         annotations=rules.checkamg.output,
-        proteins=rules.pharokka_phage.output.faa
+        proteins=rules.pharokka_phage.output.faa,
+        raw_proteins=rules.pharokka_phage.output.faa_raw
     log: os.path.join(RESULTS_DIR, "logs", "reformat_checkamg_results_{sample}.log")
     message: "Reformatting CheckAMG results for GFF enrichment"
     shell:
         """(date &&
         python ./scripts/reformat_feature_annotations.py --input {input.annotations:q} --output {output:q} \
-            --checkamg-pharokka-fasta {input.proteins:q} &&
+            --checkamg-pharokka-fasta {input.proteins:q} --checkamg-raw-fasta {input.raw_proteins:q} &&
         date) 2>&1 | tee {log:q}"""
 
 rule reformat_antidefence_results:
