@@ -21,13 +21,16 @@ def read_features(path, lengths):
                 continue
             # Pharokka may append empty columns after the nine GFF fields.
             fields = line.rstrip("\r\n").split("\t")
+            if len(fields) < 3:
+                raise ValueError(f"{path}:{line_number}: expected a GFF feature row")
+            # Pharokka can append an anticodon column to tRNA rows. We only plot CDS.
+            if fields[2] != "CDS":
+                continue
             while len(fields) > 9 and fields[-1] == "":
                 fields.pop()
             if len(fields) != 9:
                 raise ValueError(f"{path}:{line_number}: expected nine GFF columns")
-            contig, _, kind, start, end, _, strand, phase, attrs = fields
-            if kind != "CDS":
-                continue
+            contig, _, _, start, end, _, strand, phase, attrs = fields
             start, end = int(start), int(end)
             if contig not in lengths or not 1 <= start <= end <= lengths[contig]:
                 raise ValueError(f"{path}:{line_number}: unknown contig or invalid coordinates")
@@ -112,6 +115,17 @@ def overlapping_track(gff, color, sector, begin, end, strand):
     new_sign_on_track(gff, cds_track, middle, end, -1, strand)
     return cds_track
 
+
+def has_informative_cds(features):
+    for feature in features:
+        product = feature.qualifiers.get("product", [""])[0].strip().lower()
+        function = feature.qualifiers.get("function", [""])[0].strip().lower()
+        if (product and not product.startswith(("hypothetical", "unknown"))) or (
+            function and function not in {"unknown", "unknown function", "hypothetical protein"}
+        ):
+            return True
+    return False
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fasta", required=True)
@@ -131,10 +145,16 @@ def main():
     # Remove stale plots when the set of contigs changes on a rerun.
     for stale in output.glob("*_annotated_by_genotate_pharokka.png"):
         stale.unlink()
-    if not records:
+    plottable = []
+    for record in records:
+        if has_informative_cds(genotate[record.id] + pharokka[record.id]):
+            plottable.append(record)
+        else:
+            print(f"Skipping {record.id}: no informative CDS annotations")
+    if not plottable:
         return
     from pycirclize import Circos
-    for record in records:
+    for record in plottable:
         circos = Circos(sectors={record.id: lengths[record.id]})
         sector = circos.get_sector(record.id)
         sector.text(record.id, r=105, size=10)

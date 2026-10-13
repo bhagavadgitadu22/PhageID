@@ -1,12 +1,17 @@
 """Regression checks for multi-contig conversion and plot routing."""
 import csv
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
+from Bio import SeqIO
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,6 +25,7 @@ def load(name):
 
 converter = load('reformat_pharokka_genotate')
 plotter = load('plotting_pharokka_genotate')
+pharokka_plotter = load('plot_pharokka')
 
 
 class MultiContigTests(unittest.TestCase):
@@ -84,6 +90,13 @@ class MultiContigTests(unittest.TestCase):
             self.assertEqual(features[contig][0].location, baseline[contig][0].location)
             self.assertEqual(features[contig][0].qualifiers, baseline[contig][0].qualifiers)
 
+    def test_pharokka_trna_extra_anticodon_column_is_ignored(self):
+        trna = ('a\tprofile:tRNAscan-SE:2.0.13\ttRNA\t10\t20\t39.0\t+\t.\t'
+                'ID=tRNA_1;product=tRNA-Lys(AAA);anticodon=(pos:12..14,aa:Lys,seq:TTT)\tAAA\n')
+        self.gff.write_text(self.gff.read_text().replace('##FASTA\n', trna + '##FASTA\n'))
+        features = plotter.read_features(self.gff, {'a': 100, 'b': 200, 'no_genes': 4})
+        self.assertEqual(len(features['a']), 1)
+
     def test_gff_extra_nonempty_columns_and_missing_columns_are_rejected(self):
         row = 'a\ttest\tCDS\t1\t9\t.\t+\t0\tID=one'
         for malformed in [row + '\textra', row.rsplit('\t', 1)[0]]:
@@ -115,9 +128,59 @@ class MultiContigTests(unittest.TestCase):
         args = ['plotter', '--fasta', str(self.fasta), '--genotate-gff', str(self.gff), '--pharokka-gff', str(self.gff), '--output-dir', str(output)]
         with patch.dict(sys.modules, {'pycirclize': SimpleNamespace(Circos=Circos)}), patch.object(sys, 'argv', args), patch.object(plotter.plt, 'close'):
             plotter.main()
-        self.assertEqual(calls, [{'a': 100}, {'b': 200}, {'no_genes': 4}])
-        self.assertEqual(len(list(output.glob('*.png'))), 3)
+        self.assertEqual(calls, [{'a': 100}, {'b': 200}])
+        self.assertEqual(len(list(output.glob('*.png'))), 2)
         self.assertEqual(len(arrows), 4)  # Each CDS once in each annotation source.
+
+    def test_genotate_plot_skips_unknown_only_contigs(self):
+        self.genes.write_text('ID\tlength\tphrog\tannotation\tcategory\n'
+                              'a_CDS_[1..9]\t9\tNo_PHROG\thypothetical protein\tunknown function\n')
+        converter.convert(self.genes, self.fasta, self.gff)
+        output = self.root / 'unknown_plots'
+        output.mkdir()
+        (output / 'stale_annotated_by_genotate_pharokka.png').write_bytes(b'old')
+        args = ['plotter', '--fasta', str(self.fasta), '--genotate-gff', str(self.gff),
+                '--pharokka-gff', str(self.gff), '--output-dir', str(output)]
+        with patch.object(sys, 'argv', args):
+            plotter.main()
+        self.assertEqual(list(output.glob('*.png')), [])
+
+    def test_pharokka_multiplot_filters_unlabelable_contigs(self):
+        records = []
+        for name, product in [('unknown', 'hypothetical protein'), ('known', 'tail protein')]:
+            record = SeqRecord(Seq('ATG' * 10), id=name, name=name, description='')
+            record.annotations['molecule_type'] = 'DNA'
+            record.features = [SeqFeature(FeatureLocation(0, 9), type='CDS',
+                                          qualifiers={'product': [product]})]
+            records.append(record)
+        genbank = self.root / 'pharokka.gbk'
+        SeqIO.write(records, genbank, 'genbank')
+        output = self.root / 'pharokka_plots'
+        def fake_run(command, check):
+            self.assertTrue(check)
+            self.assertEqual([record.id for record in SeqIO.parse(command[3], 'genbank')], ['known'])
+            Path(command[5]).mkdir()
+            (Path(command[5]) / 'known.png').write_bytes(b'plot')
+        with patch.object(pharokka_plotter.subprocess, 'run', side_effect=fake_run) as run:
+            pharokka_plotter.plot(genbank, output)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual([path.name for path in output.iterdir()], ['known.png'])
+            SeqIO.write(records[:1], genbank, 'genbank')
+            pharokka_plotter.plot(genbank, output)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(list(output.iterdir()), [])
+
+    def test_pharokka_plot_error_is_not_treated_as_empty_annotation(self):
+        record = SeqRecord(Seq('ATG' * 10), id='known', name='known', description='')
+        record.annotations['molecule_type'] = 'DNA'
+        record.features = [SeqFeature(FeatureLocation(0, 9), type='CDS',
+                                      qualifiers={'product': ['tail protein']})]
+        genbank = self.root / 'known.gbk'
+        SeqIO.write([record], genbank, 'genbank')
+        with patch.object(pharokka_plotter.subprocess, 'run',
+                          side_effect=subprocess.CalledProcessError(1, 'pharokka')):
+            with self.assertRaises(subprocess.CalledProcessError):
+                pharokka_plotter.plot(genbank, self.root / 'failed_plots')
 
     def test_empty_fasta_and_annotations(self):
         self.fasta.write_text('')

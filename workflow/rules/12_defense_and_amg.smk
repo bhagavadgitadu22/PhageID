@@ -11,8 +11,8 @@ rule defenseFinder_update:
 
 rule antiDefenseFinder:
     output: 
-        systems=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_systems.tsv"),
-        genes=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "phanotate_defense_finder_genes.tsv")
+        systems=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "prodigal-gv_defense_finder_systems.tsv"),
+        genes=os.path.join(RESULTS_DIR, "{sample}", "defenseFinder", "prodigal-gv_defense_finder_genes.tsv")
     input: 
         pharokka = rules.pharokka_phage.output.faa,
         update = rules.defenseFinder_update.output
@@ -76,5 +76,5 @@ rule checkamg:
         """(date && 
         export LD_LIBRARY_PATH="$CONDA_PREFIX/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}" &&
         export PATH="$(dirname {input.executable:q}):$PATH" &&
-        {input.executable:q} annotate -t {threads} --input-type prot -p {input.pharokka:q} -d {input.db:q} -o $(dirname {output:q}) &&
+        {input.executable:q} annotate -t {threads} --input-type prot -p {input.pharokka:q} -d {input.db:q} -o $(dirname $(dirname {output:q})) &&
         date) &> {log}"""

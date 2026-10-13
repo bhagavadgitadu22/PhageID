@@ -6,5 +6,5 @@ dependencies:
   - hmmer=3.1
   - pip
   - pip:
-      - mdmparis-defense-finder==2.0.0
+      - mdmparis-defense-finder==3.0.0
       - macsyfinder==2.1.4

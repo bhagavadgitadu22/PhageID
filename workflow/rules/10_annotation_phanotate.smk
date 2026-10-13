@@ -20,7 +20,7 @@ rule pharokka_plot:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
-        """(date && pharokka multiplot -g {input} -o {output} && date) &> {log}"""
+        """(date && python ./scripts/plot_pharokka.py --genbank {input:q} --output-dir {output:q} && date) &> {log:q}"""
 
 # Annotation with phold in addition
 rule phold_phage:
@@ -66,11 +66,15 @@ rule empathi:
         installation = rules.empathi_install.output
     log: os.path.join(RESULTS_DIR, "logs", "empathi_{sample}.log")
     conda: os.path.join(ENV_DIR, "empathi.yaml")
+    params:
+        hf_home=os.path.join(RESULTS_DIR, "software", "huggingface")
     threads: 4
     message: "Running empathi on all viral contigs"
     shell:
         """(date && 
         mkdir -p $(dirname $(dirname {output})) &&
+        mkdir -p {params.hf_home:q}/hub &&
+        export HF_HOME={params.hf_home:q} HF_HUB_CACHE={params.hf_home:q}/hub &&
         {input.installation:q}/venv/bin/python {input.installation:q}/empathi/src/empathi/empathi.py {input.pharokka:q} viruses \
             --models_folder {input.installation:q}/empathi/models --output_folder $(dirname $(dirname {output})) --threads {threads} --confidence 0.50 &&
         date) &> {log}"""
