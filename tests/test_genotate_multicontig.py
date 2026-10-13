@@ -74,6 +74,23 @@ class MultiContigTests(unittest.TestCase):
             with self.subTest(identifier=identifier), self.assertRaises(ValueError):
                 converter.convert(self.genes, self.fasta, self.gff)
 
+    def test_pharokka_trailing_empty_columns_are_accepted(self):
+        baseline = plotter.read_features(self.gff, {'a': 100, 'b': 200, 'no_genes': 4})
+        lines = self.gff.read_text().splitlines()
+        self.gff.write_text('\n'.join(line + '\t\t' if '\tCDS\t' in line else line for line in lines) + '\n')
+        features = plotter.read_features(self.gff, {'a': 100, 'b': 200, 'no_genes': 4})
+        self.assertEqual(set(features), set(baseline))
+        for contig in features:
+            self.assertEqual(features[contig][0].location, baseline[contig][0].location)
+            self.assertEqual(features[contig][0].qualifiers, baseline[contig][0].qualifiers)
+
+    def test_gff_extra_nonempty_columns_and_missing_columns_are_rejected(self):
+        row = 'a\ttest\tCDS\t1\t9\t.\t+\t0\tID=one'
+        for malformed in [row + '\textra', row.rsplit('\t', 1)[0]]:
+            self.gff.write_text(malformed + '\n')
+            with self.subTest(row=malformed), self.assertRaisesRegex(ValueError, 'nine GFF columns'):
+                plotter.read_features(self.gff, {'a': 100})
+
     def test_unknown_contig_is_rejected(self):
         self.genes.write_text('missing_CDS_[1..3]\t3\t1\tx\ttail\n')
         with self.assertRaisesRegex(ValueError, 'unknown contig'):

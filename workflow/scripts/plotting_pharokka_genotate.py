@@ -19,7 +19,10 @@ def read_features(path, lengths):
                 break
             if not line.strip() or line.startswith("#"):
                 continue
-            fields = line.rstrip("\n").split("\t")
+            # Pharokka may append empty columns after the nine GFF fields.
+            fields = line.rstrip("\r\n").split("\t")
+            while len(fields) > 9 and fields[-1] == "":
+                fields.pop()
             if len(fields) != 9:
                 raise ValueError(f"{path}:{line_number}: expected nine GFF columns")
             contig, _, kind, start, end, _, strand, phase, attrs = fields

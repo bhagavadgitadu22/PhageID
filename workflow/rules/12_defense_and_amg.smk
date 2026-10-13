@@ -3,8 +3,11 @@ rule defenseFinder_update:
     output: os.path.join(RESULTS_DIR, "logs", "defensefinder_update.txt")
     log: os.path.join(RESULTS_DIR, "logs", "defensefinder_update.log")
     conda: os.path.join(ENV_DIR, "defensefinder.yaml")
+    params:
+        models_dir=os.path.join(RESULTS_DIR, "software", "defensefinder", "models")
     shell:
-        """(date && defense-finder update && date) > {output}"""
+        """(date && mkdir -p {params.models_dir:q} &&
+        defense-finder update -f --models-dir {params.models_dir:q} && date) > {output:q} 2> {log:q}"""
 
 rule antiDefenseFinder:
     output: 
@@ -15,10 +18,12 @@ rule antiDefenseFinder:
         update = rules.defenseFinder_update.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_defenseFinder.log")
     conda: os.path.join(ENV_DIR, "defensefinder.yaml")
+    params:
+        models_dir=os.path.join(RESULTS_DIR, "software", "defensefinder", "models")
     threads: 4    
     shell:
         """(date && 
-        defense-finder run -w {threads} --preserve-raw --antidefensefinder -o $(dirname {output.genes}) {input.pharokka} &&
+        defense-finder run -w {threads} --models-dir {params.models_dir:q} --preserve-raw --antidefensefinder -o $(dirname {output.genes}) {input.pharokka} &&
         date) &> {log}"""
 
 # checkAMG on viruses for metabolic genes

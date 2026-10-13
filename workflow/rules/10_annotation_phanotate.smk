@@ -3,8 +3,8 @@ rule pharokka_phage:
     output: 
         gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
         gff = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
-        faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "phanotate.faa"),
-        faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "phanotate_raw.faa")
+        faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv.faa"),
+        faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa")
     input: 
         virus = rules.select_viral_assembly.output.corrected,
         db = "/work/river/Databases/pharokka_db"
@@ -12,7 +12,7 @@ rule pharokka_phage:
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
-        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} -o $(dirname {output.gbk}) && date) &> {log}"""
+        """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} -g prodigal-gv --keep_raw_prodigal -o $(dirname {output.gbk}) && date) &> {log}"""
 
 rule pharokka_plot:
     output: directory(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots"))
