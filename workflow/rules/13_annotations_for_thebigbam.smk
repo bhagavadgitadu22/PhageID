@@ -34,19 +34,30 @@ rule reformat_antidefence_results:
         date) 2>&1 | tee {log:q}"""
 
 # thebigbam add-contig-annotations rules
+rule phold_gff:
+    input: rules.phold_phage.output.gbk
+    output: os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gff")
+    conda: os.path.join(ENV_DIR, "pharokka.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "phold_gff_{sample}.log")
+    message: "Converting Phold GenBank annotations to GFF3"
+    shell:
+        """(date &&
+        python ./scripts/genbank_to_gff.py --input {input:q} --output {output:q} &&
+        date) &> {log:q}"""
+
 rule phold_with_empathi:
     output: os.path.join(RESULTS_DIR, "{sample}", "annotations_on_viruses_enriched", "phold_with_empathi.gff")
     input:
-        phold = rules.phold_phage.output.gff,
+        phold = rules.phold_gff.output,
         empathi = rules.reformat_empathi_results.output
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "phold_with_empathi_{sample}.log")
     message: "Adding Empathi predictions to Phold annotations"
     shell:
         """(date && 
-        thebigbam add-contig-annotations -g {input.phold} --csv {input.empathi} \
-            --match-by feature_type,locus_tag --prefix empathi_ --keep-multiple -o {output} &&
-        date) &> {log}"""
+        python ./scripts/enrich_annotations.py --annotations {input.phold:q} --csv {input.empathi:q} \
+            --prefix empathi_ --output {output:q} &&
+        date) &> {log:q}"""
 
 rule phold_with_checkamg:
     output: os.path.join(RESULTS_DIR, "{sample}", "annotations_on_viruses_enriched", "phold_with_empathi_checkamg.gff")
@@ -58,9 +69,9 @@ rule phold_with_checkamg:
     message: "Adding CheckAMG predictions to enriched Phold annotations"
     shell:
         """(date && 
-        thebigbam add-contig-annotations -g {input.gff} --csv {input.checkamg} \
-            --match-by feature_type,locus_tag --prefix checkamg_ --keep-multiple -o {output} &&
-        date) &> {log}"""
+        python ./scripts/enrich_annotations.py --annotations {input.gff:q} --csv {input.checkamg:q} \
+            --prefix checkamg_ --output {output:q} &&
+        date) &> {log:q}"""
 
 rule combined_viral_annotations_per_sample:
     output: os.path.join(RESULTS_DIR, "{sample}", "annotations_on_viruses_enriched", "viral_annotations_enriched.gff")
@@ -72,6 +83,6 @@ rule combined_viral_annotations_per_sample:
     message: "Adding antiDefenseFinder predictions to enriched viral annotations"
     shell:
         """(date &&
-        thebigbam add-contig-annotations -g {input.gff} --csv {input.antidefense} \
-            --match-by feature_type,locus_tag --prefix antidefensefinder_ --keep-multiple -o {output} &&
-        date) &> {log}"""
+        python ./scripts/enrich_annotations.py --annotations {input.gff:q} --csv {input.antidefense:q} \
+            --prefix antidefensefinder_ --output {output:q} &&
+        date) &> {log:q}"""

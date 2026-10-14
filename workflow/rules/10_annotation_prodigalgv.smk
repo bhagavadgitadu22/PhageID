@@ -24,8 +24,7 @@ rule pharokka_plot:
 
 # Annotation with phold in addition
 rule phold_phage:
-    output: 
-        gff = os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gff"),
+    output:
         gbk = os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gbk")
     input: 
         gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),

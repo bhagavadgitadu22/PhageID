@@ -92,17 +92,14 @@ def post_dereplication_bams(wildcards):
     return [os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", f"{sample}_on_{representative}.bam")
             for sample, representative in post_dereplication_pairs(wildcards)]
 
-def post_dereplication_reference(wildcards):
-    if (wildcards.sample, wildcards.representative) not in post_dereplication_pairs(wildcards):
-        raise ValueError(f"Sample {wildcards.sample} has no contig in representative cluster {wildcards.representative}")
-    prepared = checkpoints.prepare_post_dereplication_mapping.get().output.prepared
-    return os.path.join(prepared, "references", wildcards.representative + ".fna")
-
 rule thebigbam_mapping_post_dereplication:
     output:
         bam=os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", "{sample}_on_{representative}.bam")
     input:
-        assembly=post_dereplication_reference,
+        # Keep the mapper's reference concrete on cluster workers: a checkpoint
+        # input function can expand to its directory while marked incomplete.
+        assembly=os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs", "references", "{representative}.fna"),
+        prepared=rules.prepare_post_dereplication_mapping.output.prepared,
         read1=sample_reads
     wildcard_constraints:
         sample="|".join(__import__("re").escape(sample) for sample in PHAGES_LIST) or "(?!)",
