@@ -60,5 +60,5 @@ rule thebigbam_calculate:
         thebigbam calculate -t {threads} -b {params.bam_dir:q} \
             -g {input.annotation:q}/annotations -a {input.annotation:q}/assemblies \
             --view mag -m coverage,misalignment,longreads,phagetermini \
-            -o {output:q} --time --blast &&
+            -o {output:q} --diagnose --blast all &&
         date) &> {log}"""

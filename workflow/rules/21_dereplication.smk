@@ -143,6 +143,6 @@ rule thebigbam_calculate_post_dereplication:
     shell:
         """(date &&
         thebigbam calculate -t {threads} -b {params.bam_dir:q} \
-            --view mag -m coverage,misalignment,longreads,phagetermini \
-            -g {input.annotation:q} -o {output} --time --blast &&
+            -m coverage,misalignment,longreads,phagetermini \
+            -g {input.annotation:q} -o {output} --diagnose --blast all &&
         date) &> {log}"""

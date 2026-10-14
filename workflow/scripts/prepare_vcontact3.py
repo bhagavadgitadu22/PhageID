@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Prepare matching proteins and gene-to-genome mappings for dereplicated viruses."""
 import argparse
-import csv
 from pathlib import Path
 from urllib.parse import quote
 from Bio import SeqIO
+import pandas as pd
 
 def prepare(representatives, genbanks, proteins, gene_map, genome_lengths):
     records = list(SeqIO.parse(representatives, 'fasta'))
@@ -41,14 +41,8 @@ def prepare(representatives, genbanks, proteins, gene_map, genome_lengths):
     with open(proteins, 'w') as handle:
         for protein, sequence in sequences:
             handle.write(f'>{protein}\n{sequence}\n')
-    with open(gene_map, 'w', newline='') as handle:
-        writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
-        writer.writerow(['protein_id', 'genome_id'])
-        writer.writerows(mappings)
-    with open(genome_lengths, 'w', newline='') as handle:
-        writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
-        writer.writerow(['genome_id', 'length'])
-        writer.writerows(lengths.items())
+    pd.DataFrame(mappings, columns=['protein_id', 'genome_id']).to_parquet(gene_map, index=False)
+    pd.DataFrame(lengths.items(), columns=['genome_id', 'length']).to_parquet(genome_lengths, index=False)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
