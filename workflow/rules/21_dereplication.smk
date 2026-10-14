@@ -126,7 +126,8 @@ rule thebigbam_annotations_post_dereplication:
     message: "Combining enriched annotations for dereplicated representatives only"
     shell:
         """(date &&
-        python {params.script:q} --annotations {input.annotations:q} --representatives-fasta {input.representatives:q} --output {output:q} &&
+        python {params.script:q} --annotations {input.annotations:q} \
+            --representatives-fasta {input.representatives:q} --output {output:q} &&
         date) &> {log:q}"""
 
 rule thebigbam_calculate_post_dereplication:
@@ -141,5 +142,7 @@ rule thebigbam_calculate_post_dereplication:
     log: os.path.join(RESULTS_DIR, "logs", "thebigbam_calculate_post_dereplication.log")
     shell:
         """(date &&
-        thebigbam calculate -t {threads} -b {params.bam_dir:q} -g {input.annotation:q} -o {output} --time --blast &&
+        thebigbam calculate -t {threads} -b {params.bam_dir:q} \
+            --view mag -m coverage,misalignment,longreads,phagetermini \
+            -g {input.annotation:q} -o {output} --time --blast &&
         date) &> {log}"""

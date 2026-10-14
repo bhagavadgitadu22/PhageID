@@ -1,4 +1,15 @@
 # preparing theBIGbam annotation file
+rule phold_gff:
+    input: rules.phold_phage.output.gbk
+    output: os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gff")
+    conda: os.path.join(ENV_DIR, "pharokka.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "phold_gff_{sample}.log")
+    message: "Converting Phold GenBank annotations to GFF3"
+    shell:
+        """(date &&
+        python ./scripts/genbank_to_gff.py --input {input:q} --output {output:q} &&
+        date) &> {log:q}"""
+
 rule reformat_empathi_results:
     output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses_reformatted.csv")
     input: rules.combine_empathi_with_sublyme.output
@@ -34,17 +45,6 @@ rule reformat_antidefence_results:
         date) 2>&1 | tee {log:q}"""
 
 # thebigbam add-contig-annotations rules
-rule phold_gff:
-    input: rules.phold_phage.output.gbk
-    output: os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gff")
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "phold_gff_{sample}.log")
-    message: "Converting Phold GenBank annotations to GFF3"
-    shell:
-        """(date &&
-        python ./scripts/genbank_to_gff.py --input {input:q} --output {output:q} &&
-        date) &> {log:q}"""
-
 rule phold_with_empathi:
     output: os.path.join(RESULTS_DIR, "{sample}", "annotations_on_viruses_enriched", "phold_with_empathi.gff")
     input:

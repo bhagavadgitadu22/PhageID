@@ -77,5 +77,8 @@ rule thebigbam_calculate:
     log: os.path.join(RESULTS_DIR, "logs", "thebigbam_calculate.log")
     shell:
         """(date &&
-        thebigbam calculate -t {threads} -b {params.bam_dir:q} -g {input.annotation:q}/annotations -a {input.annotation:q}/assemblies --view mag -o {output:q} --time --blast &&
+        thebigbam calculate -t {threads} -b {params.bam_dir:q} \
+            -g {input.annotation:q}/annotations -a {input.annotation:q}/assemblies \
+            --view mag -m coverage,misalignment,longreads,phagetermini \
+            -o {output:q} --time --blast &&
         date) &> {log}"""
