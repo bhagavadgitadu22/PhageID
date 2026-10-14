@@ -4,4 +4,10 @@ channels:
   - bioconda
 dependencies:
   - python=3.10
-  - vcontact3=3.1.6
+  - git
+  - mmseqs2
+  - numpy<2
+  - pandas<3
+  - pip
+  - pip:
+      - vcontact3 @ git+https://bitbucket.org/MAVERICLab/vcontact3.git@master

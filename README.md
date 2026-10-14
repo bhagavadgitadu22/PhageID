@@ -87,7 +87,7 @@ A second database is made with only representative viral contigs and all samples
 | HMMER | [HMMER](http://hmmer.org/) | v3.1 (DefenseFinder environment) |
 | CheckAMG | [Anantharaman Lab; CheckAMG](https://github.com/AnantharamanLab/CheckAMG) | Git revision `d29aaef` |
 | LoVis4u | [Egorov et al.; LoVis4u](https://github.com/art-egorov/lovis4u) | v0.1.5 |
-| vConTACT3 | [vConTACT3](https://vcontact3.readthedocs.io/) | v3.1.6 |
+| vConTACT3 | [vConTACT3](https://vcontact3.readthedocs.io/) | Source installation from Bitbucket `master` (3.2.0+ required for database v232; revision unpinned) |
 | theBIGbam | [theBIGbam](https://github.com/bhagavadgitadu22/theBIGbam) | v0.7.0 |
 | Minimap2 | [Li; minimap2](https://github.com/lh3/minimap2) | v2.31 (Autocycler); otherwise unpinned; used for read mapping |
 | SAMtools | [SAMtools](https://www.htslib.org/) | Unpinned; used for alignment processing |

@@ -25,7 +25,7 @@ rule vcontact3:
     message: "Running vContact3 on dereplicated viruses"
     shell:
         """(date &&
-        vcontact3 run --threads {threads} --db-path {input.db:q} --db-domain prokaryotes \
+        vcontact3 run --threads {threads} --db-path {input.db:q} --db-version 232 --db-domain prokaryotes \
             --proteins {input.faa:q} --gene2genome {input.gene_map:q} --len-nucleotide {input.lengths:q} \
             --output {output:q} --exports cytoscape profiles completeness &&
         date) > {log:q} 2>&1"""

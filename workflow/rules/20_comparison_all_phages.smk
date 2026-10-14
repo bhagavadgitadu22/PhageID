@@ -9,35 +9,15 @@ rule lovis4u_pharokka:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_pharokka", "lovis4u.pdf")
     input: 
         linux = rules.install_lovis4u_linux.output,
-        gff = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"))
+        gff = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff")),
+        splitter = "scripts/prepare_lovis4u_gff.py"
     conda: os.path.join(ENV_DIR, "lovis4u.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "lovis4u_pharokka.log")
     shell:
-        r"""(date && 
-        mkdir -p $(dirname {output})/gff_input && 
-        for gff in {input.gff}; do 
-            sample=$(basename $(dirname $(dirname $gff))); 
-            ln -sf $(realpath $gff) $(dirname {output})/gff_input/${{sample}}_pharokka.gff; 
-        done && 
-        lovis4u -gff $(dirname {output})/gff_input --reorient_loci --use-filename-as-id --homology-links --run-hmmscan -o $(dirname {output}) && 
-        date) &> {log}"""
-
-rule lovis4u_genotate:
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_genotate", "lovis4u.pdf")
-    input:
-        linux = rules.install_lovis4u_linux.output,
-        gff = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "genotate_pharokka.gff"))
-    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "lovis4u_genotate.log")
-    shell:
-        r"""(date && 
-        mkdir -p $(dirname {output})/gff_input && 
-        for gff in {input.gff}; do 
-            sample=$(basename $(dirname $(dirname $(dirname $gff)))); 
-            ln -sf $(realpath $gff) $(dirname {output})/gff_input/${{sample}}_genotate_pharokka.gff; 
-        done && 
-        lovis4u -gff $(dirname {output})/gff_input --reorient_loci --use-filename-as-id --homology-links --run-hmmscan -o $(dirname {output}) && 
-        date) &> {log}"""
+        """(date &&
+        python {input.splitter:q} --output-dir $(dirname {output:q})/gff_input {input.gff:q} &&
+        lovis4u -gff $(dirname {output:q})/gff_input --reorient_loci --use-filename-as-id --add-locus-id-prefix --homology-links --run-hmmscan --clust_loci-off -o $(dirname {output:q}) &&
+        date) &> {log:q}"""
 
 # One annotation/assembly file per sample defines one "viral MAG" in the first database.
 rule thebigbam_annotations:
