@@ -5,3 +5,4 @@ dependencies:
   - pip
   - pip:
     - lovis4u==0.1.5
+    - pyhmmer==0.11.4

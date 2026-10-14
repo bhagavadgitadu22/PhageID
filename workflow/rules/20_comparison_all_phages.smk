@@ -1,6 +1,6 @@
 # Comparison of phages' annotations with lovis4u
 rule install_lovis4u_linux:
-    output: os.path.join(RESULTS_DIR, "logs", "lovis4u_linux.touch")
+    output: os.path.join(RESULTS_DIR, "logs", "lovis4u_linux_pyhmmer_0.11.4.touch")
     conda: os.path.join(ENV_DIR, "lovis4u.yaml")
     shell:
         """lovis4u --linux && lovis4u --get-hmms && touch {output}"""
@@ -16,7 +16,7 @@ rule lovis4u_pharokka:
     shell:
         """(date &&
         python {input.splitter:q} --output-dir $(dirname {output:q})/gff_input {input.gff:q} &&
-        lovis4u -gff $(dirname {output:q})/gff_input --reorient_loci --use-filename-as-id --add-locus-id-prefix --homology-links --run-hmmscan --clust_loci-off -o $(dirname {output:q}) &&
+        lovis4u -gff $(dirname {output:q})/gff_input --reorient_loci --use-filename-as-id --add-locus-id-prefix --homology-links --run-hmmscan --clust_loci-off --debug -o $(dirname {output:q}) &&
         date) &> {log:q}"""
 
 # One annotation/assembly file per sample defines one "viral MAG" in the first database.
