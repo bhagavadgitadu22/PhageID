@@ -7,8 +7,10 @@ from urllib.parse import quote
 from Bio import SeqIO
 
 
-def escape(value):
-    return quote(str(value), safe=".:^*$@!+_?-|")
+def escape(value, *, attribute=False):
+    # GFF3 attribute text permits spaces; delimiters and control characters
+    # still need escaping. Sequence IDs retain their stricter encoding.
+    return quote(str(value), safe=".:^*$@!+_?-|" + (" " if attribute else ""))
 
 
 def convert(input_path, output_path):
@@ -26,7 +28,7 @@ def convert(input_path, output_path):
                 # locus tags being unique across feature types or records.
                 qualifiers.setdefault("ID", [f"phold_{record_index}_{feature_index}"])
                 attributes = ";".join(
-                    f"{escape(key)}={','.join(escape(value) for value in values)}"
+                    f"{escape(key, attribute=True)}={','.join(escape(value, attribute=True) for value in values)}"
                     for key, values in qualifiers.items()
                 )
                 coding_offset = int(qualifiers.get("codon_start", ["1"])[0]) - 1

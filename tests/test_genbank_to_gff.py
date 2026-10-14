@@ -38,10 +38,18 @@ class ConversionTests(unittest.TestCase):
                           ["1", "3", ".", "+", "0"]])
         attributes = dict(field.split("=", 1) for field in rows[0][8].split(";"))
         self.assertEqual(attributes["locus_tag"], "gene_1")
+        self.assertEqual(attributes["product"], "capsid%3B protein%2C A%3DB")
         self.assertEqual(unquote(attributes["product"]), "capsid; protein, A=B")
         self.assertEqual(attributes["note"], "one,two")
         self.assertEqual(rows[0][8], rows[1][8])
         self.assertNotEqual(rows[0][8].split("ID=")[1], rows[2][8].split("ID=")[1])
+
+    def test_attribute_spaces_preserve_reserved_character_escaping(self):
+        self.assertEqual(module.escape("head and packaging", attribute=True), "head and packaging")
+        self.assertEqual(module.escape("terminase large subunit", attribute=True), "terminase large subunit")
+        self.assertEqual(module.escape("50%; A=B,C\t\n\r", attribute=True),
+                         "50%25%3B A%3DB%2CC%09%0A%0D")
+        self.assertEqual(module.escape("contig 1"), "contig%201")
 
 
 if __name__ == "__main__":
