@@ -23,14 +23,22 @@ class VcontactInputsTests(unittest.TestCase):
             for name in ['sample_a_contig','discarded','sample_b_contig']:
                 record=SeqRecord(Seq('ATGAAATAA'),id=name,name=name,description='')
                 record.annotations['molecule_type']='DNA'
-                record.features=[SeqFeature(FeatureLocation(0,9),type='CDS',qualifiers={'locus_tag':['same_tag'],'translation':['MK']})]
+                qualifiers={'locus_tag':['same_tag'],'translation':['MK']}
+                if name == 'sample_a_contig':
+                    qualifiers['product']=['capsid protein']
+                record.features=[SeqFeature(FeatureLocation(0,9),type='CDS',qualifiers=qualifiers)]
                 records.append(record)
             SeqIO.write(records,p/'annotations.gbk','genbank')
             module.prepare(p/'representatives.fa',[p/'annotations.gbk'],p/'proteins.faa',p/'map.parquet',p/'lengths.parquet')
             proteins=list(SeqIO.parse(p/'proteins.faa','fasta'))
             mappings=pd.read_parquet(p/'map.parquet')
+            self.assertEqual(mappings.columns.tolist(),['protein_id','keywords','genome_id'])
             self.assertEqual([r.id for r in proteins],mappings['protein_id'].tolist())
             self.assertEqual(mappings['genome_id'].tolist(),['sample_a_contig','sample_b_contig'])
+            self.assertEqual(mappings['keywords'].tolist(),['capsid protein','None'])
+            overview=mappings.replace('None',pd.NA).groupby('genome_id').nunique()
+            overview['genome_id']=overview.index.tolist()
+            self.assertEqual(len(overview.columns),3)
             self.assertEqual(len({r.id for r in proteins}),2)
             self.assertEqual([str(r.seq) for r in proteins],['MK','MK'])
             lengths=pd.read_parquet(p/'lengths.parquet')
@@ -46,5 +54,5 @@ class VcontactInputsTests(unittest.TestCase):
             (p/'empty.fa').write_text('')
             module.prepare(p/'empty.fa',[],p/'proteins.faa',p/'map.parquet',p/'lengths.parquet')
             self.assertEqual((p/'proteins.faa').read_text(),'')
-            self.assertEqual(pd.read_parquet(p/'map.parquet').columns.tolist(),['protein_id','genome_id'])
+            self.assertEqual(pd.read_parquet(p/'map.parquet').columns.tolist(),['protein_id','keywords','genome_id'])
             self.assertEqual(pd.read_parquet(p/'lengths.parquet').columns.tolist(),['genome_id','length'])

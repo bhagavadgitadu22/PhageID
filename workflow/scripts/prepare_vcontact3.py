@@ -31,7 +31,9 @@ def prepare(representatives, genbanks, proteins, gene_map, genome_lengths):
                 count += 1
                 protein = quote(record.id, safe='_-.') + '__CDS_' + str(count)
                 sequences.append((protein, ''.join(translation[0].split())))
-                mappings.append((protein, record.id))
+                product = feature.qualifiers.get('product', ['None'])
+                keyword = product[0].strip() if product and product[0].strip() else 'None'
+                mappings.append((protein, keyword, record.id))
             if count == 0:
                 raise ValueError(f'No annotated proteins for {record.id}')
     if seen != set(lengths):
@@ -41,7 +43,7 @@ def prepare(representatives, genbanks, proteins, gene_map, genome_lengths):
     with open(proteins, 'w') as handle:
         for protein, sequence in sequences:
             handle.write(f'>{protein}\n{sequence}\n')
-    pd.DataFrame(mappings, columns=['protein_id', 'genome_id']).to_parquet(gene_map, index=False)
+    pd.DataFrame(mappings, columns=['protein_id', 'keywords', 'genome_id']).to_parquet(gene_map, index=False)
     pd.DataFrame(lengths.items(), columns=['genome_id', 'length']).to_parquet(genome_lengths, index=False)
 
 def main():
