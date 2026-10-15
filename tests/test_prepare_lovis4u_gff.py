@@ -60,6 +60,59 @@ class PrepareLovis4uGffTests(unittest.TestCase):
                 splitter.prepare([source], output)
             self.assertEqual((output / "existing.gff").read_text(), "existing")
 
+    def test_post_dereplication_keeps_only_representatives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sources = []
+            for sample, contigs in (("sample_a", ("rep_a", "removed_a")),
+                                    ("sample_b", ("rep_b", "removed_b"))):
+                source = root / sample / "pharokka" / "pharokka.gff"
+                source.parent.mkdir(parents=True)
+                source.write_text(
+                    "##gff-version 3\n"
+                    + "".join(f"{contig}\tPharokka\tCDS\t1\t9\t.\t+\t0\tID={contig}\n"
+                              for contig in contigs)
+                    + "##FASTA\n"
+                    + "".join(f">{contig}\nATGAAATAA\n" for contig in contigs)
+                )
+                sources.append(source)
+            representatives = root / "representatives.fna"
+            representatives.write_text(">rep_a\nATGAAATAA\n>rep_b\nATGAAATAA\n")
+            output = root / "gff_input"
+            output.mkdir()
+            (output / "stale.gff").write_text("old")
+
+            splitter.prepare(sources, output, representatives)
+
+            files = sorted(output.glob("*.gff"))
+            self.assertEqual(len(files), 2)
+            self.assertFalse((output / "stale.gff").exists())
+            self.assertEqual(
+                {file.read_text().split("##FASTA\n>", 1)[1].splitlines()[0] for file in files},
+                {"rep_a", "rep_b"},
+            )
+            self.assertTrue(all("removed_" not in file.read_text() for file in files))
+
+    def test_missing_representative_preserves_previous_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "sample" / "pharokka" / "pharokka.gff"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "##gff-version 3\n"
+                "present\tPharokka\tCDS\t1\t9\t.\t+\t0\tID=cds1\n"
+                "##FASTA\n>present\nATGAAATAA\n"
+            )
+            representatives = root / "representatives.fna"
+            representatives.write_text(">missing\nATGAAATAA\n")
+            output = root / "gff_input"
+            output.mkdir()
+            (output / "existing.gff").write_text("existing")
+
+            with self.assertRaisesRegex(ValueError, "Representatives missing"):
+                splitter.prepare([source], output, representatives)
+            self.assertEqual((output / "existing.gff").read_text(), "existing")
+
 
 if __name__ == "__main__":
     unittest.main()

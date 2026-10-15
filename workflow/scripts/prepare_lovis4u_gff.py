@@ -13,7 +13,21 @@ def safe_label(value):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", value)[:48]
 
 
-def split_gff(source, sample, destination):
+def representative_ids(path):
+    identifiers = set()
+    with open(path) as handle:
+        for number, line in enumerate(handle, 1):
+            if line.startswith(">"):
+                fields = line[1:].split()
+                if not fields or fields[0] in identifiers:
+                    raise ValueError(f"{path}:{number}: empty or duplicate representative ID")
+                identifiers.add(fields[0])
+    if not identifiers:
+        raise ValueError(f"No representatives found in {path}")
+    return identifiers
+
+
+def split_gff(source, sample, destination, selected=None):
     features = {}
     sequences = {}
     current_id = None
@@ -48,7 +62,10 @@ def split_gff(source, sample, destination):
     if missing:
         raise ValueError(f"{source}: missing FASTA sequence for {', '.join(sorted(missing))}")
 
+    written = set()
     for contig, fasta_lines in sequences.items():
+        if selected is not None and contig not in selected:
+            continue
         length = sum(len(line.strip()) for line in fasta_lines[1:])
         if not length:
             raise ValueError(f"{source}: empty FASTA sequence for {contig}")
@@ -76,40 +93,48 @@ def split_gff(source, sample, destination):
             output.writelines(fasta_lines)
             if not fasta_lines[-1].endswith("\n"):
                 output.write("\n")
-    return sum(bool(features.get(contig)) for contig in sequences)
+        written.add(contig)
+    return written
 
 
-def prepare(gff_paths, output_dir):
+def prepare(gff_paths, output_dir, representatives_fasta=None):
     if not gff_paths:
         raise ValueError("No Pharokka GFF inputs supplied")
+    selected = representative_ids(representatives_fasta) if representatives_fasta else None
     output_dir = Path(output_dir)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     samples = set()
     with tempfile.TemporaryDirectory(prefix="lovis4u_gff_", dir=output_dir.parent) as temporary:
         staging = Path(temporary)
-        count = 0
+        written = set()
         for source in map(Path, gff_paths):
             sample = source.parent.parent.name
             if sample in samples:
                 raise ValueError(f"Duplicate Pharokka sample: {sample}")
             samples.add(sample)
-            count += split_gff(source, sample, staging)
-        if not count:
+            found = split_gff(source, sample, staging, selected)
+            if selected is not None and written.intersection(found):
+                raise ValueError(f"Representative occurs in multiple Pharokka GFFs: {', '.join(sorted(written.intersection(found)))}")
+            written.update(found)
+        if selected is not None and written != selected:
+            raise ValueError(f"Representatives missing from annotated Pharokka GFFs: {', '.join(sorted(selected - written))}")
+        if not written:
             raise ValueError("No annotated contigs found in Pharokka GFF inputs")
         if output_dir.is_symlink():
             raise ValueError(f"Refusing to replace symlink: {output_dir}")
         if output_dir.exists():
             shutil.rmtree(output_dir)
         staging.rename(output_dir)
-    print(f"Prepared {count} single-contig GFF files from {len(samples)} samples")
+    print(f"Prepared {len(written)} single-contig GFF files from {len(samples)} samples")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--representatives-fasta", help="Keep only contigs in this dereplicated FASTA")
     parser.add_argument("gff", nargs="+")
     args = parser.parse_args()
-    prepare(args.gff, args.output_dir)
+    prepare(args.gff, args.output_dir, args.representatives_fasta)
 
 
 if __name__ == "__main__":

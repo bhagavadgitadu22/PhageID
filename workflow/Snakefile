@@ -151,7 +151,8 @@ def comparison_pipeline_inputs(wildcards):
     return [report_directory, rules.ani_for_dereplication.output.ani_results,
             *rules.viruses_dereplicated.output, *rules.dereplication_report.output, 
             *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output,
-            *rules.lovis4u_pharokka.output, *rules.vcontact3.output]
+            *rules.lovis4u_pharokka.output, *rules.lovis4u_pharokka_post_dereplication.output,
+            *rules.vcontact3.output]
 
 ### Rules to include
 # Function to recursively include all .smk files

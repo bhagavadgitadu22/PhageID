@@ -32,6 +32,35 @@ class EnrichmentTests(unittest.TestCase):
                     module.enrich("input.gff", csv, Path(tmp) / "out.gff", "empathi_")
                 self.assertTrue(run.call_args.kwargs["check"])
 
+    def test_empathi_pipes_are_restored_only_in_annotation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = Path(tmp) / "hits.csv"
+            output = Path(tmp) / "out.gff"
+            csv.write_text("feature_type,locus_tag,Annotation\nCDS,gene_1,DNA-associated|transferase\n")
+
+            def write_bigbam_output(command, check):
+                self.assertTrue(check)
+                output.write_text(
+                    "##gff-version 3\n"
+                    "ctg\tphold\tCDS\t1\t9\t.\t+\t0\t"
+                    "ID=cds%7C1;locus_tag=gene_1;"
+                    "empathi_Annotation=DNA-associated%7Ctransferase%7Canti-restriction%7Cdefense systems;"
+                    "product=DNA%7Cprotein\n"
+                    "##FASTA\n>ctg%7Cname\nACGT\n"
+                )
+
+            with patch.object(module.subprocess, "run", side_effect=write_bigbam_output):
+                module.enrich("input.gff", csv, output, "empathi_", literal_pipes=True)
+
+            result = output.read_text()
+            self.assertIn(
+                "empathi_Annotation=DNA-associated|transferase|anti-restriction|defense systems",
+                result,
+            )
+            self.assertIn("ID=cds%7C1", result)
+            self.assertIn("product=DNA%7Cprotein", result)
+            self.assertIn(">ctg%7Cname", result)
+
 
 if __name__ == "__main__":
     unittest.main()

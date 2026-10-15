@@ -56,7 +56,7 @@ rule phold_with_empathi:
     shell:
         """(date && 
         python ./scripts/enrich_annotations.py --annotations {input.phold:q} --csv {input.empathi:q} \
-            --prefix empathi_ --output {output:q} &&
+            --prefix empathi_ --literal-pipes --output {output:q} &&
         date) &> {log:q}"""
 
 rule phold_with_checkamg:

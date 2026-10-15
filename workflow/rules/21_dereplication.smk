@@ -92,6 +92,23 @@ def post_dereplication_bams(wildcards):
     return [os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", f"{sample}_on_{representative}.bam")
             for sample, representative in post_dereplication_pairs(wildcards)]
 
+# lovis4u of dereplicated phages
+rule lovis4u_pharokka_post_dereplication:
+    output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_pharokka_post_dereplication", "lovis4u.pdf")
+    input:
+        linux = rules.install_lovis4u_linux.output,
+        gff = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff")),
+        representatives = rules.viruses_dereplicated.output.fna_viruses_derep,
+        splitter = "scripts/prepare_lovis4u_gff.py"
+    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "lovis4u_pharokka_post_dereplication.log")
+    shell:
+        """(date &&
+        python {input.splitter:q} --output-dir $(dirname {output:q})/gff_input --representatives-fasta {input.representatives:q} {input.gff:q} &&
+        lovis4u -gff $(dirname {output:q})/gff_input --reorient_loci --use-filename-as-id --add-locus-id-prefix --homology-links --run-hmmscan --clust_loci-off --debug -o $(dirname {output:q}) &&
+        date) &> {log:q}"""
+
+# thebigbam post dereplication
 rule thebigbam_mapping_post_dereplication:
     output:
         bam=os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", "{sample}_on_{representative}.bam")
