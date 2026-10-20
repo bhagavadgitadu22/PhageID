@@ -139,7 +139,7 @@ def per_sample_pipeline_inputs(wildcards):
         raise ValueError(f"Unknown sample: {wildcards.sample}")
     if wildcards.sample not in active_viral_samples(wildcards):
         return [report_directory]
-    outputs = [*rules.phageterm.output,
+    outputs = [*rules.phageterm.output, *rules.viral_annotations_report.output,
                *rules.pharokka_plot.output, *rules.genotate_pharokka_plot.output,
                *rules.combined_viral_annotations_per_sample.output]
     return expand(outputs, sample=wildcards.sample)
@@ -172,7 +172,9 @@ localrules: assembly_selection_manifest, select_viral_assembly
 ### Global rules
 # Assembly rules
 rule corrected_assembly_all_phages:
-    input: lambda wildcards: checkpoints.viral_report_global.get().output.report
+    input:
+        rules.all_reads_stats.input,
+        lambda wildcards: checkpoints.viral_report_global.get().output.report
 
 # Three rules to rule them all
 rule pipeline_new_phage:
@@ -184,6 +186,7 @@ rule pipeline_all_phages:
     default_target: True
     input:
         report=lambda wildcards: checkpoints.viral_report_global.get().output.report,
+        annotations=rules.viral_annotations_report_global.output,
         samples=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
 
 rule pipeline_comparison_phages:

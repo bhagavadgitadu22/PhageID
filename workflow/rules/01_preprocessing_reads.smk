@@ -66,6 +66,42 @@ rule remove_bacterial_contamination:
         fi
         date) &> {log:q}"""
 
+# trying to see if a peak of sizes indicates expected number of viruses and their sizes
+# that only works for long reads though
+rule extract_reads_longer_than_20kbp:
+    output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "longer_than_20kbp.{sample}.fasta")
+    input: rules.preprocess_reads_porechop.output
+    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_extract_reads_longer_than_20kbp.log")
+    shell:
+        """(date && seqtk seq -a -L 20000 {input:q} > {output:q} && date) &> {log:q}"""
+
+rule genomad_long_reads:
+    output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "genomad_longer_than_20kbp.{sample}", "longer_than_20kbp.{sample}_summary", "longer_than_20kbp.{sample}_virus_summary.tsv")
+    input: 
+        reads = rules.extract_reads_longer_than_20kbp.output,
+        db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
+    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad_long_reads.log")
+    shell:
+        """(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.reads:q} $(dirname $(dirname {output:q})) $(dirname {input.db:q}) && date) &> {log:q}"""
+
+rule histogram_long_viral_reads:
+    output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "long_viral_reads_histogram.txt")
+    input: rules.genomad_long_reads.output
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_histogram_long_viral_reads.log")
+    shell:
+        """(date &&
+        awk -F'\t' 'NR>1 {{v=int($2/1000)*1000; count[v]++; if(v>max) max=v}}
+        END {{
+            for(i=0; i<=max; i+=1000) {{
+                printf "%6d-%6d | ", i, i+999
+                for(j=0; j<count[i]; j++) printf "*"
+                printf " (%d)\\n", count[i]
+            }}
+        }}' {input:q} > {output:q} &&
+        date) &> {log:q}"""
+
 checkpoint assembly_read_status:
     input:
         reads=sample_reads,
@@ -79,3 +115,8 @@ checkpoint assembly_read_status:
         """python ./scripts/assembly_read_stats.py filter \
             --all-reads {input.reads:q} --filtered-reads {input.filtered:q} \
             --has-host {params.has_host} --output {output:q} > {log:q} 2>&1"""
+
+rule all_reads_stats:
+    input: 
+        expand(os.path.join(RESULTS_DIR, "{sample}", "reads", "host_filtering_stats.tsv"), sample=PHAGES_LIST),
+        expand(os.path.join(RESULTS_DIR, "{sample}", "long_reads", "long_viral_reads_histogram.txt"), sample=[sample for sample in PHAGES_LIST if READ_FILES[sample]])

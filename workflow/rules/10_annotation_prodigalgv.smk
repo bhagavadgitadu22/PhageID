@@ -3,6 +3,7 @@ rule pharokka_phage:
     output: 
         gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
         gff = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
+        functions = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka_cds_functions.tsv"),
         faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv.faa"),
         faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa")
     input: 
@@ -103,3 +104,31 @@ rule combine_empathi_with_sublyme:
         python ./scripts/combine_empathi_with_sublyme.py --empathi {input.empathi:q} --sublyme {input.sublyme:q} --output {output:q} &&
         date) > {log:q} 2>&1"""
 
+# Report coding density and Pharokka function counts for each selected viral contig.
+rule viral_annotations_report:
+    input:
+        fasta=rules.select_viral_assembly.output.corrected,
+        gff=rules.pharokka_phage.output.gff,
+        functions=rules.pharokka_phage.output.functions
+    output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "viral_annotations_report.tsv")
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_annotations_report.log")
+    shell:
+        """python ./scripts/viral_annotations_report.py --sample {wildcards.sample:q} --fasta {input.fasta:q} --gff {input.gff:q} --functions {input.functions:q} --output {output:q} > {log:q} 2>&1"""
+
+# Concatenate reports for samples with retained viral contigs.
+rule viral_annotations_report_global:
+    input:
+        report=lambda wc: checkpoints.viral_report_global.get().output.report,
+        reports=active_sample_files(rules.viral_annotations_report.output[0])
+    output: os.path.join(RESULTS_DIR, "reports", "viral_annotations", "viral_contigs.tsv")
+    params:
+        header="Viral_contig\tSample\tCoding_density_percent\tCDS\tconnector\tDNA, RNA and nucleotide metabolism\thead and packaging\tintegration and excision\tlysis\tmoron, auxiliary metabolic gene and host takeover\tother\ttail\ttranscription regulation\tunknown function\ttRNAs\tCRISPRs\ttmRNAs\tVFDB_Virulence_Factors\tCARD_AMR_Genes"
+    log: os.path.join(RESULTS_DIR, "logs", "viral_annotations_report_global.log")
+    shell:
+        """(
+            mkdir -p $(dirname {output:q})
+            printf '%s\\n' {params.header:q} > {output:q}
+            for file in {input.reports:q}; do
+                awk 'FNR > 1' "$file" >> {output:q}
+            done
+        ) > {log:q} 2>&1"""
