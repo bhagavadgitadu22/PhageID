@@ -81,7 +81,7 @@ rule genomad_long_reads:
     input: 
         reads = rules.extract_reads_longer_than_20kbp.output,
         db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
-    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
+    conda: os.path.join(ENV_DIR, "genomad.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad_long_reads.log")
     shell:
         """(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.reads:q} $(dirname $(dirname {output:q})) $(dirname {input.db:q}) && date) &> {log:q}"""
