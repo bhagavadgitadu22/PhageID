@@ -82,9 +82,20 @@ rule genomad_long_reads:
         reads = rules.extract_reads_longer_than_20kbp.output,
         db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
     conda: os.path.join(ENV_DIR, "genomad.yaml")
+    threads: 10
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad_long_reads.log")
     shell:
-        """(date && genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.reads:q} $(dirname $(dirname {output:q})) $(dirname {input.db:q}) && date) &> {log:q}"""
+        """(
+            date
+            if grep -q '^>' {input.reads:q}; then
+                genomad end-to-end --threads {threads} --enable-score-calibration --composition virome --max-fdr 0.05 {input.reads:q} $(dirname $(dirname {output:q})) $(dirname {input.db:q})
+            else
+                echo "No reads at least 20 kbp; skipping geNomad."
+                mkdir -p $(dirname {output:q})
+                printf 'seq_name\tlength\ttopology\tcoordinates\tn_genes\tgenetic_code\tvirus_score\tfdr\tn_hallmarks\tmarker_enrichment\ttaxonomy\n' > {output:q}
+            fi
+            date
+        ) &> {log:q}"""
 
 rule histogram_long_viral_reads:
     output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "long_viral_reads_histogram.txt")
