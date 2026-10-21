@@ -70,6 +70,12 @@ class ManualViralCorrectionsTests(unittest.TestCase):
                 self.publish(self.manual)
             self.assertEqual(self.output.read_text(), "previous result")
 
+    def test_empty_manual_contig_identifies_the_record(self):
+        self.manual.write_text(">sample_a\nAAAA\n>sample_b\n")
+        with self.assertRaisesRegex(ValueError, "Empty sequence for contig sample_b"):
+            self.publish(self.manual)
+        self.assertFalse(self.output.exists())
+
     def test_rule_copies_or_recomputes_checkv_according_to_final_sequence(self):
         source = (SCRIPT.parent.parent / "rules/04_assembly_selection.smk").read_text()
         command = source.split("rule finalize_viral_assembly:", 1)[1].split('"""', 1)[1].split('"""', 1)[0]

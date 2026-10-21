@@ -28,8 +28,9 @@ def fasta_sequences(path):
                 raise ValueError(f"Sequence before FASTA header in {path}")
             else:
                 sequences[name] += "".join(line.split())
-    if any(not sequence for sequence in sequences.values()):
-        raise ValueError(f"Empty sequence in {path}")
+    for contig, sequence in sequences.items():
+        if not sequence:
+            raise ValueError(f"Empty sequence for contig {contig} in {path}")
     return sequences
 
 
