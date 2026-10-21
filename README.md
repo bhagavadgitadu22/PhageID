@@ -47,9 +47,9 @@ A second database is made with only representative viral contigs and all samples
 
 ## Main reports
 
-- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, correction counts, CheckV metrics and geNomad taxonomy/provirus status. `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/viral_contigs/viral_contigs.tsv` and `reports/viral_contigs/samples.tsv`.
-- `reports/viral_annotations/viral_contigs.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). Per-sample tables are `<sample>/pharokka/viral_annotations_report.tsv`.
-- `combined_viruses/dereplication/dereplication_report.tsv`: every contig before dereplication, its selection status, representative, lengths, cluster size, ANI and aligned fractions.
+- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, correction counts, CheckV metrics and geNomad taxonomy/provirus status. `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`.
+- `reports/annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). Per-sample tables are `<sample>/pharokka/viral_annotations_report.tsv`.
+- `reports/dereplication_report.tsv`: every contig before dereplication, its selection status, representative, lengths, cluster size, ANI and aligned fractions.
 
 ## Key resources table
 

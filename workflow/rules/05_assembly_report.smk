@@ -83,7 +83,10 @@ checkpoint viral_report_global:
     input:
         contigs=expand(rules.viral_report.output.contigs, sample=PHAGES_LIST),
         summaries=expand(rules.viral_report.output.summary, sample=PHAGES_LIST)
-    output: report=directory(os.path.join(RESULTS_DIR, "reports", "viral_contigs"))
+    output:
+        contigs=os.path.join(RESULTS_DIR, "reports", "assembly_report_per_viral_contig.tsv"),
+        samples=os.path.join(RESULTS_DIR, "reports", "assembly_report_per_sample.tsv"),
+        attempts=os.path.join(RESULTS_DIR, "reports", "assembly_attempts.tsv")
     params:
         attempts_script=workflow.basedir + "/scripts/assembly_attempt_report.py",
         results_dir=RESULTS_DIR,
@@ -93,15 +96,15 @@ checkpoint viral_report_global:
     shell:
         """
         (
-            mkdir -p {output.report:q}
-            printf '%s\n' {params.contig_header:q} > {output.report:q}/viral_contigs.tsv
+            mkdir -p "$(dirname {output.contigs:q})"
+            printf '%s\n' {params.contig_header:q} > {output.contigs:q}
             for file in {input.contigs:q}; do
-                awk 'FNR > 1' "$file" >> {output.report:q}/viral_contigs.tsv
+                awk 'FNR > 1' "$file" >> {output.contigs:q}
             done
-            printf '%s\n' {params.sample_header:q} > {output.report:q}/samples.tsv
+            printf '%s\n' {params.sample_header:q} > {output.samples:q}
             for file in {input.summaries:q}; do
-                awk 'FNR > 1' "$file" >> {output.report:q}/samples.tsv
+                awk 'FNR > 1' "$file" >> {output.samples:q}
             done
-            python {params.attempts_script:q} --results-dir {params.results_dir:q} --output {output.report:q}/assembly_attempts.tsv
+            python {params.attempts_script:q} --results-dir {params.results_dir:q} --output {output.attempts:q}
         ) > {log:q} 2>&1
         """

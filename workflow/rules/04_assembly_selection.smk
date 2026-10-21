@@ -137,8 +137,7 @@ rule select_viral_assembly:
         status=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly_status.txt"),
         read_stats=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "read_stats.tsv")
     params:
-        destinations=lambda wc, output: [value for name, path in output.items()
-                                         for value in ("--destination", name, str(path))]
+        destinations=lambda wc, output: [value for name, path in output.items() for value in ("--destination", name, str(path))]
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_select_viral_assembly.log")
     shell:
         """python ./scripts/assembly_selection_manifest.py publish --sample {wildcards.sample:q} --manifest {input.manifest:q} {params.destinations:q} > {log:q} 2>&1"""

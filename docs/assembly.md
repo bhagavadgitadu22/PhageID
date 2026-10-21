@@ -170,7 +170,7 @@ Without this option, Snakemake's usual completion markers cannot reliably identi
 
 In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the two mapping rules map all and bacterial-free reads to the corrected viral contigs using theBIGbam `--circular`. `mapped_assembly_info` produces lengths, both coverage values, and Flye circularity metadata. `viral_report` uses [`viral_contig_report.py`](../workflow/scripts/viral_contig_report.py) to write per-sample contig and summary tables.
 
-The `viral_report_global` checkpoint concatenates those into `reports/viral_contigs/viral_contigs.tsv` and `samples.tsv`. This generated `samples.tsv` is separate from the input sample list. Its sample statuses are:
+The `viral_report_global` checkpoint concatenates those into `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`. This generated sample report is separate from the input sample list. Its sample statuses are:
 
 | Status | Meaning |
 | --- | --- |
@@ -186,7 +186,7 @@ Both reports use underscore-separated headers. `Number_reads` counts all preproc
 
 The wrapper writes `<attempt-log>.attempt.json` before launching its command, preserving the Slurm job ID, log path, execution status, outcome, and exit code. This permits diagnosis even when a whole job is killed before cleanup.
 
-[`assembly_attempt_report.py`](../workflow/scripts/assembly_attempt_report.py) combines these records and Slurm accounting into `reports/viral_contigs/assembly_attempts.tsv` when the global report completes. It includes individual Autocycler helper attempts. While errors block the global report, generate a separate diagnostic report:
+[`assembly_attempt_report.py`](../workflow/scripts/assembly_attempt_report.py) combines these records and Slurm accounting into `reports/assembly_attempts.tsv` when the global report completes. It includes individual Autocycler helper attempts. While errors block the global report, generate a separate diagnostic report:
 
 ```bash
 python scripts/assembly_attempt_report.py \

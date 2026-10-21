@@ -56,7 +56,7 @@ rule viruses_dereplicated:
         """
 
 rule dereplication_report:
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "dereplication_report.tsv")
+    output: os.path.join(RESULTS_DIR, "reports", "dereplication_report.tsv")
     input:
         fasta=rules.combine_all_viruses.output,
         clusters=rules.ani_for_dereplication.output.clustering_results,

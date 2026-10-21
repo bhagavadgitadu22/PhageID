@@ -98,7 +98,7 @@ rule genomad_long_reads:
         ) &> {log:q}"""
 
 rule histogram_long_viral_reads:
-    output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "long_viral_reads_histogram.txt")
+    output: os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.txt")
     input: rules.genomad_long_reads.output
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_histogram_long_viral_reads.log")
     shell:
@@ -130,4 +130,4 @@ checkpoint assembly_read_status:
 rule all_reads_stats:
     input: 
         expand(os.path.join(RESULTS_DIR, "{sample}", "reads", "host_filtering_stats.tsv"), sample=PHAGES_LIST),
-        expand(os.path.join(RESULTS_DIR, "{sample}", "long_reads", "long_viral_reads_histogram.txt"), sample=[sample for sample in PHAGES_LIST if READ_FILES[sample]])
+        expand(os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.txt"), sample=[sample for sample in PHAGES_LIST if READ_FILES[sample]])

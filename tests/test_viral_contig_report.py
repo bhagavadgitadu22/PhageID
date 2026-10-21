@@ -45,7 +45,9 @@ class ViralReportTests(unittest.TestCase):
         command=command.replace(':q}', '}').format(
             input=SimpleNamespace(contigs=shlex.join([str(report[1]) for report in reports]),
                                   summaries=shlex.join([str(report[2]) for report in reports])),
-            output=SimpleNamespace(report=quote(output_dir)),
+            output=SimpleNamespace(contigs=quote(output_dir/'assembly_report_per_viral_contig.tsv'),
+                                   samples=quote(output_dir/'assembly_report_per_sample.tsv'),
+                                   attempts=quote(output_dir/'assembly_attempts.tsv')),
             params=SimpleNamespace(attempts_script=quote(ROOT/'workflow/scripts/assembly_attempt_report.py'), results_dir=quote(self.p/'results'), contig_header=quote('\t'.join(module.CONTIG_FIELDS)),
                                    sample_header=quote('\t'.join(module.SAMPLE_FIELDS))),
             log=quote(self.p/'global.log'))
@@ -97,10 +99,10 @@ class ViralReportTests(unittest.TestCase):
         module.write_tsv(self.p/'empty.tsv',module.CONTIG_FIELDS,[])
         module.write_tsv(self.p/'empty_summary.tsv',module.SAMPLE_FIELDS,[module.sample_summary('empty',[])])
         self.concatenate_reports([('sample_with_underscores',self.p/'stats.tsv',self.p/'summary.tsv'),('empty',self.p/'empty.tsv',self.p/'empty_summary.tsv')],self.p/'global')
-        rows=read_tsv(self.p/'global/samples.tsv')
+        rows=read_tsv(self.p/'global/assembly_report_per_sample.tsv')
         self.assertEqual((rows[0]['Total_bp'],rows[0]['Total_corrected_bp']),('380','170'))
         self.assertEqual(rows[1],dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs'])))
-        self.assertEqual(len(read_tsv(self.p/'global/viral_contigs.tsv')),2)
+        self.assertEqual(len(read_tsv(self.p/'global/assembly_report_per_viral_contig.tsv')),2)
 
     def test_empty_corrected_fasta_has_header_only_report(self):
         (self.p/'input.fa').write_text('')
@@ -126,7 +128,7 @@ class ViralReportTests(unittest.TestCase):
         self.assertEqual(rows[0]['CheckV_gene_count'], '10')
         self.assertEqual(rows[0]['geNomad_taxonomy'], 'Viruses;Caudoviricetes')
         self.concatenate_reports([('sample_with_underscores',self.p/'enriched.tsv',self.p/'enriched_summary.tsv')],self.p/'enriched_global')
-        self.assertEqual(read_tsv(self.p/'enriched_global/viral_contigs.tsv'), rows)
+        self.assertEqual(read_tsv(self.p/'enriched_global/assembly_report_per_viral_contig.tsv'), rows)
 
     def test_provirus_uses_parent_coverage_and_region_length(self):
         name='sample_with_underscores_contig_1|provirus_11_110'
@@ -157,13 +159,13 @@ class ViralReportTests(unittest.TestCase):
         module.sample_report('empty',self.p/'input.fa',self.p/'flye.tsv',self.p/'concat.csv',self.p/'dtr.csv',contigs,summary_output=summary)
         self.concatenate_reports([('empty',contigs,summary)],self.p/'global')
         self.assertEqual(read_tsv(self.p/'results/empty/assembly_stats.tsv'), [])
-        self.assertEqual(read_tsv(self.p/'global/viral_contigs.tsv'), [])
-        self.assertEqual(read_tsv(self.p/'global/samples.tsv')[0]['Status'], 'no_viral_contigs')
+        self.assertEqual(read_tsv(self.p/'global/assembly_report_per_viral_contig.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/assembly_report_per_sample.tsv')[0]['Status'], 'no_viral_contigs')
 
     def test_global_concatenation_with_no_samples_writes_headers(self):
         self.concatenate_reports([],self.p/'global')
-        self.assertEqual(read_tsv(self.p/'global/viral_contigs.tsv'), [])
-        self.assertEqual(read_tsv(self.p/'global/samples.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/assembly_report_per_viral_contig.tsv'), [])
+        self.assertEqual(read_tsv(self.p/'global/assembly_report_per_sample.tsv'), [])
 
     def test_fasta_parser_multiline_and_duplicate_ids(self):
         (self.p/'lengths.fa').write_text('>one description\nACG\nTT\n>two\nC\n')
@@ -194,8 +196,9 @@ class ViralReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'No assembly metadata'): self.report()
 
     def test_checkpoint_filters_targets_and_skips_all_empty_comparison(self):
-        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['ready','100','90','flye','bacterial free','80','1','10','10','ready'])),dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
-        checkpoint=SimpleNamespace(get=lambda: SimpleNamespace(output=SimpleNamespace(report=str(self.p))))
+        sample_report=self.p/'assembly_report_per_sample.tsv'
+        module.write_tsv(sample_report,module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['ready','100','90','flye','bacterial free','80','1','10','10','ready'])),dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
+        checkpoint=SimpleNamespace(get=lambda: SimpleNamespace(output=SimpleNamespace(samples=str(sample_report))))
         def expand(patterns, sample):
             patterns=[patterns] if isinstance(patterns,str) else patterns
             samples=[sample] if isinstance(sample,str) else sample
@@ -204,9 +207,9 @@ class ViralReportTests(unittest.TestCase):
         source=(ROOT/'workflow/Snakefile').read_text()
         exec(source[source.index('def active_viral_samples'):source.index('### Rules to include')],namespace)
         self.assertEqual(namespace['active_sample_files']('{sample}/annotation')(None),['ready/annotation'])
-        self.assertEqual(namespace['per_sample_pipeline_inputs'](SimpleNamespace(sample='empty')),[str(self.p)])
-        module.write_tsv(self.p/'samples.tsv',module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
-        self.assertEqual(namespace['comparison_pipeline_inputs'](None),[str(self.p)])
+        self.assertEqual(namespace['per_sample_pipeline_inputs'](SimpleNamespace(sample='empty')),[str(sample_report)])
+        module.write_tsv(sample_report,module.SAMPLE_FIELDS,[dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs']))])
+        self.assertEqual(namespace['comparison_pipeline_inputs'](None),[str(sample_report)])
 
 
 if __name__ == '__main__': unittest.main()

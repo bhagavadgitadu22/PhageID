@@ -126,29 +126,29 @@ def sample_mapper(wildcards):
 
 def active_viral_samples(wildcards):
     import csv
-    report_directory = checkpoints.viral_report_global.get().output.report
-    with open(os.path.join(report_directory, "samples.tsv"), newline="") as handle:
+    sample_report = checkpoints.viral_report_global.get().output.samples
+    with open(sample_report, newline="") as handle:
         return [row["Sample"] for row in csv.DictReader(handle, delimiter="\t") if row["Status"] == "ready"]
 
 def active_sample_files(pattern):
     return lambda wildcards: expand(pattern, sample=active_viral_samples(wildcards))
 
 def per_sample_pipeline_inputs(wildcards):
-    report_directory = checkpoints.viral_report_global.get().output.report
+    sample_report = checkpoints.viral_report_global.get().output.samples
     if wildcards.sample not in PHAGES_LIST:
         raise ValueError(f"Unknown sample: {wildcards.sample}")
     if wildcards.sample not in active_viral_samples(wildcards):
-        return [report_directory]
+        return [sample_report]
     outputs = [*rules.phageterm.output, *rules.viral_annotations_report.output,
                *rules.pharokka_plot.output, *rules.genotate_pharokka_plot.output,
                *rules.combined_viral_annotations_per_sample.output]
     return expand(outputs, sample=wildcards.sample)
 
 def comparison_pipeline_inputs(wildcards):
-    report_directory = checkpoints.viral_report_global.get().output.report
+    sample_report = checkpoints.viral_report_global.get().output.samples
     if not active_viral_samples(wildcards):
-        return [report_directory]
-    return [report_directory, rules.ani_for_dereplication.output.ani_results,
+        return [sample_report]
+    return [sample_report, rules.ani_for_dereplication.output.ani_results,
             *rules.viruses_dereplicated.output, *rules.dereplication_report.output, 
             *rules.thebigbam_calculate.output, *rules.thebigbam_calculate_post_dereplication.output,
             *rules.lovis4u_pharokka.output, *rules.lovis4u_pharokka_post_dereplication.output,
@@ -174,7 +174,7 @@ localrules: assembly_selection_manifest, select_viral_assembly
 rule corrected_assembly_all_phages:
     input:
         rules.all_reads_stats.input,
-        lambda wildcards: checkpoints.viral_report_global.get().output.report
+        lambda wildcards: checkpoints.viral_report_global.get().output
 
 # Three rules to rule them all
 rule pipeline_new_phage:
@@ -185,9 +185,9 @@ rule pipeline_new_phage:
 rule pipeline_all_phages:
     default_target: True
     input:
-        report=lambda wildcards: checkpoints.viral_report_global.get().output.report,
-        annotations=rules.viral_annotations_report_global.output,
-        samples=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
+        assembly = lambda wildcards: checkpoints.viral_report_global.get().output,
+        annotations = rules.viral_annotations_report_global.output,
+        samples = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
 
 rule pipeline_comparison_phages:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
