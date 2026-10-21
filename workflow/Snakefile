@@ -185,6 +185,7 @@ rule pipeline_new_phage:
 rule pipeline_all_phages:
     default_target: True
     input:
+        read_stats = rules.all_reads_stats.input,
         assembly = lambda wildcards: checkpoints.viral_report_global.get().output,
         annotations = rules.viral_annotations_report_global.output,
         samples = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "done.touch"))
