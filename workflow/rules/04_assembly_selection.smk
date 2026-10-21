@@ -125,10 +125,10 @@ rule assembly_selection_manifest:
 rule select_viral_assembly:
     input: manifest=rules.assembly_selection_manifest.output
     output:
-        corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
-        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
-        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_dtr_report.csv"),
-        checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"),
+        corrected=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_circular_viruses.fasta"),
+        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_breaking_concatemers_report.csv"),
+        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_breaking_dtr_report.csv"),
+        checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_quality_summary.tsv"),
         fasta=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna"),
         summary=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus_summary.tsv"),
         assembly=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly.fasta"),
@@ -141,3 +141,42 @@ rule select_viral_assembly:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_select_viral_assembly.log")
     shell:
         """python ./scripts/assembly_selection_manifest.py publish --sample {wildcards.sample:q} --manifest {input.manifest:q} {params.destinations:q} > {log:q} 2>&1"""
+
+# Publish an optional, manually edited FASTA without changing the selected candidate.
+rule finalize_viral_assembly:
+    input:
+        automatic=rules.select_viral_assembly.output.corrected,
+        concatemer=rules.select_viral_assembly.output.concatemer_report,
+        dtr=rules.select_viral_assembly.output.dtr_report,
+        quality=rules.select_viral_assembly.output.checkv_quality,
+        manual=manual_viral_fasta,
+        db="/work/river/Databases/checkv-db-v1.5"
+    output:
+        corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
+        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
+        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_dtr_report.csv"),
+        manual_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "manual_corrections_report.tsv"),
+        checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv")
+    params:
+        script=workflow.basedir + "/scripts/finalize_viral_assembly.py",
+        manual_args=lambda wc, input: (["--manual", str(input.manual[0] if isinstance(input.manual, list) else input.manual)]
+                                       if input.manual else [])
+    conda: os.path.join(ENV_DIR, "checkv.yaml")
+    threads: 4
+    log: os.path.join(RESULTS_DIR, "logs", "{sample}_finalize_viral_assembly.log")
+    shell:
+        """(
+            python {params.script:q} --automatic {input.automatic:q} --concatemer {input.concatemer:q} --dtr {input.dtr:q} {params.manual_args:q} --output {output.corrected:q} --concatemer-output {output.concatemer_report:q} --dtr-output {output.dtr_report:q} --report {output.manual_report:q} &&
+            checkv_dir=$(dirname {output.checkv_quality:q}) &&
+            rm -rf -- "$checkv_dir" &&
+            mkdir -p "$checkv_dir" &&
+            if cmp -s {input.automatic:q} {output.corrected:q}; then
+                cp {input.quality:q} {output.checkv_quality:q}
+            else
+                if grep -q '^>' {output.corrected:q}; then
+                    checkv end_to_end -t {threads} -d {input.db:q} {output.corrected:q} "$checkv_dir"
+                else
+                    printf 'contig_id\tgene_count\tviral_genes\thost_genes\tcheckv_quality\tmiuvig_quality\tcompleteness\tcontamination\n' > {output.checkv_quality:q}
+                fi
+            fi
+        ) > {log:q} 2>&1"""

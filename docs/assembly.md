@@ -162,11 +162,28 @@ Without this option, Snakemake's usual completion markers cannot reliably identi
 
 `assembly_selection_manifest` is an **ordinary local rule**, not a checkpoint. It waits for selection's upstream checkpoints to resolve, then uses [`assembly_selection_manifest.py`](../workflow/scripts/assembly_selection_manifest.py) to write `assembly_selection/selected_sources.json`. The manifest records the chosen assembler, read set, and exact source paths. It also tracks the quality/status files of assessed alternatives so changes can trigger reselection.
 
-`select_viral_assembly` is another ordinary local rule. It reads the manifest, validates all sources, and computes read statistics before publishing any selected outputs. Its outputs include:
+`select_viral_assembly` is another ordinary local rule. It reads the manifest, validates all sources, and computes read statistics before publishing the selected automatic outputs. Its outputs include:
 
 - `assembly_selection/assembly.fasta`: original selected assembly.
-- `circularisation/circular_viruses.fasta`: retained, corrected viral contigs.
-- Selected CheckV/geNomad tables, correction reports, assembler/status files, and `assembly_selection/read_stats.tsv`.
+- `assembly_selection/automatic_circular_viruses.fasta`: automatically corrected viral contigs.
+- Selected CheckV/geNomad tables, automatic correction reports, assembler/status files, and `assembly_selection/read_stats.tsv`.
+
+`finalize_viral_assembly` publishes `circularisation/circular_viruses.fasta`, its correction reports, and `checkv/quality_summary.tsv`. Without a manual override, it copies the automatic FASTA and CheckV table. With an override, it reruns CheckV on the final sequence. The separate `circularisation/manual_corrections_report.tsv` records which sequences changed and their length differences; automatic concatemer and DTR counts remain attributed only to automatic correction.
+
+### Manual sequence corrections
+
+To remove a repeat or make another sequence edit, copy the current published FASTA to the stable manual input path, edit that copy, and rerun the pipeline. If you already edited the published FASTA, copy it **before** running the updated workflow so the edit is preserved. For example:
+
+```bash
+sample=/scratch/boutroux/AKIRA/Brevumdimonas307_T9_22
+mkdir -p "$sample/manual_corrections"
+cp "$sample/circularisation/circular_viruses.fasta" \
+   "$sample/manual_corrections/circular_viruses.fasta"
+# Edit $sample/manual_corrections/circular_viruses.fasta, then from workflow/:
+snakemake --use-conda --cores 8 pipeline_all_phages pipeline_comparison_phages
+```
+
+Keep every contig ID and their order; edit sequence bases only. The workflow rejects missing, extra, duplicate, or empty contigs. Editing the manual input triggers publication, CheckV, mapping, annotation, reports, and comparison updates. Assembly selection still uses the automatically corrected candidates; the final CheckV result assesses the manual sequence. The published FASTA under `circularisation/` remains generated and may be replaced. To remove an override, delete the file under `manual_corrections/` and rerun with Snakemake's input-change rerun trigger enabled (the default).
 
 In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the two mapping rules map all and bacterial-free reads to the corrected viral contigs using theBIGbam `--circular`. `mapped_assembly_info` produces lengths, both coverage values, and Flye circularity metadata. `viral_report` uses [`viral_contig_report.py`](../workflow/scripts/viral_contig_report.py) to write per-sample contig and summary tables.
 
@@ -180,7 +197,7 @@ The `viral_report_global` checkpoint concatenates those into `reports/assembly_r
 
 An unresolved execution error prevents the final report from completing for that sample; it is not silently converted to `assembly_failed`.
 
-Both reports use underscore-separated headers. `Number_reads` counts all preprocessed reads, `Number_reads_without_host` counts retained host-filtered reads, `Assembler` identifies the selected tool, `Assembly_method` indicates `all` or `bacterial free`, and `Assembly_used_reads` counts the actual assembly input after any Flye subsampling. Without a host reference, the first two counts are equal. Sample metadata remains available even when no viral contigs are retained.
+Both reports use underscore-separated headers. `Number_reads` counts all preprocessed reads, `Number_reads_without_host` counts retained host-filtered reads, `Assembler` identifies the selected tool, `Assembly_method` indicates `all` or `bacterial free`, and `Assembly_used_reads` counts the actual assembly input after any Flye subsampling. `Manual_correction` and `Manual_length_change_bp` distinguish manual edits from automated DTR removal. Without a host reference, the first two read counts are equal. Sample metadata remains available even when no viral contigs are retained.
 
 ### Attempt diagnostics and retries
 

@@ -4,7 +4,7 @@ rule thebigbam_mapping:
         bam = os.path.join(RESULTS_DIR, "minimap2", "thebigbam", "{sample}.bam"),
         bai = os.path.join(RESULTS_DIR, "minimap2", "thebigbam", "{sample}.bam.bai")
     input:
-        assembly = rules.select_viral_assembly.output.corrected,
+        assembly = rules.finalize_viral_assembly.output.corrected,
         read1 = sample_reads
     params: mapper=sample_mapper
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
@@ -26,7 +26,7 @@ rule thebigbam_mapping_without_bacteria:
         bam = os.path.join(RESULTS_DIR, "minimap2", "thebigbam", "{sample}_without_bacteria.bam"),
         bai = os.path.join(RESULTS_DIR, "minimap2", "thebigbam", "{sample}_without_bacteria.bam.bai")
     input:
-        assembly = rules.select_viral_assembly.output.corrected,
+        assembly = rules.finalize_viral_assembly.output.corrected,
         read1 = rules.remove_bacterial_contamination.output
     params: mapper=sample_mapper
     conda: os.path.join(ENV_DIR, "thebigbam.yaml")
@@ -48,8 +48,8 @@ rule mapped_assembly_info:
     output: os.path.join(RESULTS_DIR, "{sample}", "assembly_info.tsv")
     input:
         assembly=rules.select_viral_assembly.output.assembly,
-        corrected=rules.select_viral_assembly.output.corrected,
-        concatemer=rules.select_viral_assembly.output.concatemer_report,
+        corrected=rules.finalize_viral_assembly.output.corrected,
+        concatemer=rules.finalize_viral_assembly.output.concatemer_report,
         flye_info=rules.select_viral_assembly.output.flye_info,
         bam=rules.thebigbam_mapping.output.bam,
         filtered_bam=rules.thebigbam_mapping_without_bacteria.output.bam,
@@ -61,22 +61,23 @@ rule mapped_assembly_info:
 # Produce the contig table and one summary row for this sample after CheckV.
 rule viral_report:
     input:
-        fasta=rules.select_viral_assembly.output.corrected,
+        fasta=rules.finalize_viral_assembly.output.corrected,
         assembly_info=rules.mapped_assembly_info.output,
         assembler=rules.select_viral_assembly.output.assembler,
         status=rules.select_viral_assembly.output.status,
         read_stats=rules.select_viral_assembly.output.read_stats,
         filter_report=rules.assembly_read_status.output,
-        concatemer=rules.select_viral_assembly.output.concatemer_report,
-        dtr=rules.select_viral_assembly.output.dtr_report,
-        checkv=rules.select_viral_assembly.output.checkv_quality,
+        concatemer=rules.finalize_viral_assembly.output.concatemer_report,
+        dtr=rules.finalize_viral_assembly.output.dtr_report,
+        manual=rules.finalize_viral_assembly.output.manual_report,
+        checkv=rules.finalize_viral_assembly.output.checkv_quality,
         genomad=rules.select_viral_assembly.output.summary
     output:
         contigs=os.path.join(RESULTS_DIR, "{sample}", "assembly_stats.tsv"),
         summary=os.path.join(RESULTS_DIR, "{sample}", "viral_sample_report.tsv")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_report.log")
     shell:
-        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --filter-report {input.filter_report:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
+        """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --filter-report {input.filter_report:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --manual-report {input.manual:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
 
 # Concatenate per-sample reports before selecting samples for annotation.
 checkpoint viral_report_global:
@@ -90,7 +91,7 @@ checkpoint viral_report_global:
     params:
         attempts_script=workflow.basedir + "/scripts/assembly_attempt_report.py",
         results_dir=RESULTS_DIR,
-        contig_header='Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy',
+        contig_header='Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tManual_correction\tManual_length_change_bp\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy',
         sample_header='Sample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tViral_contigs\tTotal_bp\tTotal_corrected_bp\tStatus'
     log: os.path.join(RESULTS_DIR, "logs", "viral_report_global.log")
     shell:

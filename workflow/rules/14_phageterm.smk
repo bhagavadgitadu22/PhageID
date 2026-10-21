@@ -24,7 +24,7 @@ rule phageterm:
     output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf")
     input:
         reads=sample_reads,
-        virus=rules.select_viral_assembly.output.corrected,
+        virus=rules.finalize_viral_assembly.output.corrected,
         installation=rules.phageterm_preparation.output.installation
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log")
     conda: os.path.join(ENV_DIR, "phageterm.yaml")

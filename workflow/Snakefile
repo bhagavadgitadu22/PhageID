@@ -124,6 +124,10 @@ def selection_manifest_inputs(wc):
 def sample_mapper(wildcards):
     return "minimap2-ont" if READ_FILES[wildcards.sample] else "minimap2-sr-secondary"
 
+def manual_viral_fasta(wildcards):
+    path = os.path.join(RESULTS_DIR, wildcards.sample, "manual_corrections", "circular_viruses.fasta")
+    return [path] if os.path.isfile(path) else []
+
 def active_viral_samples(wildcards):
     import csv
     sample_report = checkpoints.viral_report_global.get().output.samples

@@ -5,7 +5,7 @@ import csv
 from pathlib import Path
 
 CONTIG_FIELDS = ['Viral_contig', 'Sample', 'Number_reads', 'Number_reads_without_host', 'Assembler', 'Assembly_method', 'Assembly_used_reads', 'Total_bp', 'Total_corrected_bp', 'Coverage', 'Coverage_without_bacteria', 'Flye_circularity',
-                 'Number_of_concatemers_broken', 'DTR_length_removed']
+                 'Number_of_concatemers_broken', 'DTR_length_removed', 'Manual_correction', 'Manual_length_change_bp']
 ANNOTATION_FIELDS = ['CheckV_gene_count', 'CheckV_viral_genes', 'CheckV_host_genes',
                      'CheckV_quality', 'MIUVIG_quality', 'CheckV_completeness', 'CheckV_contamination',
                      'geNomad_provirus', 'geNomad_taxonomy']
@@ -47,7 +47,7 @@ def fasta_lengths(path):
     return lengths
 
 
-def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None, assembly_status="success", filter_report=None):
+def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, output, checkv=None, genomad=None, summary_output=None, assembler="flye", read_stats=None, assembly_status="success", filter_report=None, manual_report=None):
     read_fields = ['Assembly reads', 'Percentage bacterial reads', 'All reads number', 'Reads used for assembly number']
     read_values = dict.fromkeys(read_fields, 'NA')
     if read_stats:
@@ -64,6 +64,9 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
     dtrs = read_corrections(dtr_report)
     if ids != set(concatemers) or ids != set(dtrs):
         raise ValueError(f'Correction report IDs do not match corrected FASTA for {sample}')
+    manual = indexed_tsv(manual_report, 'Viral_contig') if manual_report else {}
+    if manual_report and set(manual) != ids:
+        raise ValueError(f'Manual correction report IDs do not match corrected FASTA for {sample}')
     flye = {}
     with open(flye_info) as handle:
         for line in handle:
@@ -81,7 +84,19 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         original_length = int(metadata[1])
         circular = metadata[4]
         concatemer, dtr = concatemers[contig], dtrs[contig]
-        if int(dtr['original_length']) != int(concatemer['corrected_length']) or int(dtr['corrected_length']) != corrected_length:
+        auto_length = int(dtr['corrected_length'])
+        if int(dtr['original_length']) != int(concatemer['corrected_length']):
+            raise ValueError(f'Correction lengths do not match for {contig}')
+        manual_change = manual.get(contig)
+        if manual_change:
+            if (int(manual_change['Auto_corrected_bp']) != auto_length
+                    or int(manual_change['Final_bp']) != corrected_length
+                    or int(manual_change['Manual_length_change_bp']) != corrected_length - auto_length
+                    or manual_change['Manual_correction'] not in {'Yes', 'No'}):
+                raise ValueError(f'Manual correction lengths do not match for {contig}')
+            if manual_change['Manual_correction'] == 'No' and corrected_length != auto_length:
+                raise ValueError(f'Manual correction status conflicts with length for {contig}')
+        elif auto_length != corrected_length:
             raise ValueError(f'Correction lengths do not match for {contig}')
         if int(concatemer['original_length']) != original_length:
             raise ValueError(f'Assembly and correction lengths do not match for {contig}')
@@ -92,7 +107,9 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
         rows.append(dict(zip(CONTIG_FIELDS, [
             contig, sample, *assembly_values, original_length, corrected_length, metadata[2], metadata[3], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
-            int(dtr['original_length']) - int(dtr['corrected_length']),
+            int(dtr['original_length']) - auto_length,
+            manual_change['Manual_correction'] if manual_change else 'No',
+            corrected_length - auto_length,
         ])))
     for row in rows:
         row.update(dict.fromkeys(ANNOTATION_FIELDS, 'NA'))
@@ -153,10 +170,11 @@ def main():
     parser.add_argument("--read-stats", required=True)
     parser.add_argument("--filter-report", required=True)
     parser.add_argument("--assembly-status", required=True)
+    parser.add_argument("--manual-report")
     args = parser.parse_args()
     assembly_status = Path(args.assembly_status).read_text().strip()
     sample_report(args.sample, args.fasta, args.flye_info, args.concatemer_report,
-                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats, assembly_status, args.filter_report)
+                  args.dtr_report, args.output, args.checkv, args.genomad, args.summary_output, args.assembler, args.read_stats, assembly_status, args.filter_report, args.manual_report)
 
 
 if __name__ == '__main__':

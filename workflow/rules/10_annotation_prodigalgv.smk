@@ -7,7 +7,7 @@ rule pharokka_phage:
         faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv.faa"),
         faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa")
     input: 
-        virus = rules.select_viral_assembly.output.corrected,
+        virus = rules.finalize_viral_assembly.output.corrected,
         db = "/work/river/Databases/pharokka_db"
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
@@ -108,7 +108,7 @@ rule combine_empathi_with_sublyme:
 rule viral_annotations_report:
     output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "viral_annotations_report.tsv")
     input:
-        fasta=rules.select_viral_assembly.output.corrected,
+        fasta=rules.finalize_viral_assembly.output.corrected,
         gff=rules.pharokka_phage.output.gff,
         functions=rules.pharokka_phage.output.functions
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_annotations_report.log")

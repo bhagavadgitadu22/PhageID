@@ -104,6 +104,23 @@ class ViralReportTests(unittest.TestCase):
         self.assertEqual(rows[1],dict(zip(module.SAMPLE_FIELDS,['empty','NA','NA','NA','NA','NA','0','0','0','no_viral_contigs'])))
         self.assertEqual(len(read_tsv(self.p/'global/assembly_report_per_viral_contig.tsv')),2)
 
+    def test_manual_length_change_keeps_dtr_count_separate(self):
+        (self.p/'input.fa').write_text('>sample_with_underscores_contig_1\n'+'A'*75+'\n>sample_with_underscores_contig_2\n'+'C'*80+'\n')
+        manual=self.p/'manual.tsv'
+        module.write_tsv(manual, ['Viral_contig', 'Auto_corrected_bp', 'Final_bp',
+                                  'Manual_correction', 'Manual_length_change_bp'], [
+            dict(Viral_contig='sample_with_underscores_contig_1', Auto_corrected_bp=90,
+                 Final_bp=75, Manual_correction='Yes', Manual_length_change_bp=-15),
+            dict(Viral_contig='sample_with_underscores_contig_2', Auto_corrected_bp=80,
+                 Final_bp=80, Manual_correction='No', Manual_length_change_bp=0)])
+        module.sample_report('sample_with_underscores',self.p/'input.fa',self.p/'flye.tsv',
+                             self.p/'concat.csv',self.p/'dtr.csv',self.p/'stats.tsv',
+                             manual_report=manual)
+        row=read_tsv(self.p/'stats.tsv')[0]
+        self.assertEqual((row['Total_corrected_bp'],row['DTR_length_removed'],
+                          row['Manual_correction'],row['Manual_length_change_bp']),
+                         ('75','10','Yes','-15'))
+
     def test_empty_corrected_fasta_has_header_only_report(self):
         (self.p/'input.fa').write_text('')
         write_csv(self.p/'concat.csv',[],list(self.concat[0]))
