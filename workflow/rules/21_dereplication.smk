@@ -29,14 +29,15 @@ rule ani_for_dereplication:
         clustering_results = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "clusters_all_viruses.tsv"),
     input:
         blast_results = rules.blast_before_dereplication.output, 
-        fna_viruses = rules.combine_all_viruses.output
+        fna_viruses = rules.combine_all_viruses.output,
+        quality = lambda wc: checkpoints.viral_report_global.get().output.contigs
     conda: os.path.join(ENV_DIR, "checkv.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "ani_all_viruses.log")
     message: "ANI for dereplication of the viral dataset"
     shell:
         """
         (date && python scripts/ani_calc.py -i {input.blast_results} -o {output.ani_results} &&
-        python scripts/ani_clust.py --fna {input.fna_viruses} --ani {output.ani_results} --out {output.clustering_results} --min_ani 95 --min_tcov 85 --min_qcov 0 && date) &> {log}
+        python scripts/ani_clust.py --fna {input.fna_viruses:q} --ani {output.ani_results:q} --quality-report {input.quality:q} --out {output.clustering_results:q} --min_ani 95 --min_tcov 85 --min_qcov 0 && date) &> {log}
         """
 
 rule viruses_dereplicated:

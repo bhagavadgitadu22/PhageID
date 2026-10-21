@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import time, resource, platform, sys, argparse, gzip
+import time, resource, platform, sys, argparse, gzip, csv, math
 
 def parse_seqs(path):
     handle = gzip.open(path) if path.split('.')[-1] == 'gz' else open(path)
@@ -41,6 +41,8 @@ def parse_arguments():
         help="""Path to nucleotide sequences""")
     parser.add_argument('--ani', type=str, required=True, metavar='PATH',
         help="""Path to tab-delimited file with fields: [qname, tname, num_alns, ani, qcov, tcov]""")
+    parser.add_argument('--quality-report', type=str, required=True, metavar='PATH',
+        help="Global assembly report with CheckV quality, completeness, and contamination")
     parser.add_argument('--out', type=str, required=True, metavar='BASENAME',
         help="""Path to output file""")
     parser.add_argument('--exclude', type=str, metavar='PATH',
@@ -57,13 +59,57 @@ def parse_arguments():
         help="""Minimum sequence length (default=1)""")
     return vars(parser.parse_args())
 
+QUALITY_RANK = {
+    'Not-determined': 1, 'Low-quality': 2, 'Medium-quality': 3,
+    'High-quality': 4, 'Complete': 5,
+}
+
+
+def read_quality(path):
+    quality = {}
+    with open(path, newline='') as handle:
+        reader = csv.DictReader(handle, delimiter='\t')
+        required = {'Viral_contig', 'CheckV_quality', 'CheckV_completeness',
+                    'CheckV_contamination'}
+        if not required.issubset(reader.fieldnames or []):
+            raise ValueError(f'Missing CheckV fields in {path}')
+        for row in reader:
+            name = row['Viral_contig']
+            category = row['CheckV_quality']
+            if not name or name in quality:
+                raise ValueError(f'Missing or duplicate contig ID in {path}: {name}')
+            if category not in QUALITY_RANK:
+                raise ValueError(f'Unknown CheckV quality for {name}: {category}')
+            values = []
+            for field in ('CheckV_completeness', 'CheckV_contamination'):
+                value = row[field].strip()
+                if value.upper() in {'', 'NA', 'N/A'}:
+                    values.append(None)
+                else:
+                    number = float(value)
+                    if not math.isfinite(number) or not 0 <= number <= 100:
+                        raise ValueError(f'Invalid {field} for {name}: {value}')
+                    values.append(number)
+            quality[name] = (category, *values)
+    return quality
+
+
+def representative_key(name, length, quality):
+    category, completeness, contamination = quality[name]
+    # A single-contig genome has N50 equal to its corrected length.
+    score = (completeness - 5 * contamination + 0.5 * math.log10(length)
+             if completeness is not None and contamination is not None else None)
+    # Sort by category, then scored values, then corrected length and ID.
+    return (-QUALITY_RANK[category], score is None, -(score or 0), -length, name)
+
+
 # main
 start = time.time()
 
 # args
 args = parse_arguments()
 
-# list seqs, sorted by length
+# Rank representatives by CheckV category and dRep-style quality score.
 print("\nreading sequences...")
 seqs = {}
 exclude = set([_.rstrip() for _ in open(args['exclude'])]) if args['exclude'] else None
@@ -78,7 +124,11 @@ for index, r in enumerate(parse_seqs(args['fna'])):
         continue
     else:
         seqs[id] = len(seq)
-seqs = [x[0] for x in sorted(seqs.items(), key=lambda x: x[1], reverse=True)]
+quality = read_quality(args['quality_report'])
+missing = set(seqs) - set(quality)
+if missing:
+    raise ValueError(f'Missing CheckV quality for contigs: {", ".join(sorted(missing))}')
+seqs = sorted(seqs, key=lambda name: representative_key(name, seqs[name], quality))
 print("%s sequences retained from fna" % len(seqs))
 log_time(start)
 
@@ -111,7 +161,7 @@ log_time(start)
 print("\nclustering...")
 clust_to_seqs = {}
 seq_to_clust = {}
-# loop over seqs in sorted order
+# Loop over contigs in quality order; each eligible query recruits its members.
 for seq_id in seqs:
     # seq already been assigned; cant be centroid
     if seq_id in seq_to_clust:
