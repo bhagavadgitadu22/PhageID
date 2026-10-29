@@ -158,7 +158,7 @@ rule finalize_viral_assembly:
         manual_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "manual_corrections_report.tsv"),
         checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv")
     params:
-        script=workflow.basedir + "/scripts/finalize_viral_assembly.py",
+        script=workflow.basedir + "",
         manual_args=lambda wc, input: (["--manual", str(input.manual[0] if isinstance(input.manual, list) else input.manual)]
                                        if input.manual else [])
     conda: os.path.join(ENV_DIR, "checkv.yaml")
@@ -166,7 +166,7 @@ rule finalize_viral_assembly:
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_finalize_viral_assembly.log")
     shell:
         """(
-            python {params.script:q} --automatic {input.automatic:q} --concatemer {input.concatemer:q} --dtr {input.dtr:q} {params.manual_args:q} --output {output.corrected:q} --concatemer-output {output.concatemer_report:q} --dtr-output {output.dtr_report:q} --report {output.manual_report:q} &&
+            python ./scripts/finalize_viral_assembly.py --automatic {input.automatic:q} --concatemer {input.concatemer:q} --dtr {input.dtr:q} {params.manual_args:q} --output {output.corrected:q} --concatemer-output {output.concatemer_report:q} --dtr-output {output.dtr_report:q} --report {output.manual_report:q} &&
             checkv_dir=$(dirname {output.checkv_quality:q}) &&
             rm -rf -- "$checkv_dir" &&
             mkdir -p "$checkv_dir" &&

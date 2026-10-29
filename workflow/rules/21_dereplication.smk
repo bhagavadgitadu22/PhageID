@@ -129,7 +129,7 @@ rule thebigbam_mapping_post_dereplication:
     message: "Mapping {wildcards.sample} reads to representative {wildcards.representative}"
     shell:
         """(date &&
-        thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular -o {output.bam:q} &&
+        thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular --keep-unmapped -o {output.bam:q} &&
         date) &> {log:q}"""
 
 rule thebigbam_annotations_post_dereplication:

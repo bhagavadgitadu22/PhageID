@@ -1,6 +1,6 @@
 # Assembly and selection
 
-The pipeline selects one assembly per sample using the highest CheckV quality among its retained viral contigs. Rescue is conditional: it runs only when an earlier attempt does not produce a `Complete` or `High-quality` viral contig. All retained viral contigs from the selected assembly are kept, including those with lower quality.
+The pipeline selects one assembly per sample using the highest CheckV quality among its retained viral contigs. Rescue steps are conditional: they run only when an earlier attempt does not produce a `Complete` or `High-quality` viral contig. All retained viral contigs from the selected assembly are kept, including those with lower quality.
 
 Paths below are relative to `results_dir`, except workflow source files. Run Snakemake commands from `workflow/`.
 
@@ -158,7 +158,7 @@ Without this option, Snakemake's usual completion markers cannot reliably identi
 
 `--keep-going` permits independent samples to progress after a job error. It does not make the global report complete while one of its dependencies is still failing.
 
-## Publication, reports, and checkpoints
+## Final assembly selection
 
 `assembly_selection_manifest` is an **ordinary local rule**, not a checkpoint. It waits for selection's upstream checkpoints to resolve, then uses [`assembly_selection_manifest.py`](../workflow/scripts/assembly_selection_manifest.py) to write `assembly_selection/selected_sources.json`. The manifest records the chosen assembler, read set, and exact source paths. It also tracks the quality/status files of assessed alternatives so changes can trigger reselection.
 
@@ -172,22 +172,23 @@ Without this option, Snakemake's usual completion markers cannot reliably identi
 
 ### Manual sequence corrections
 
-To remove a repeat or make another sequence edit, copy the current published FASTA to the stable manual input path, edit that copy, and rerun the pipeline. If you already edited the published FASTA, copy it **before** running the updated workflow so the edit is preserved. For example:
+To remove a repeat or make another sequence edit, copy the current published FASTA to the stable manual input path, edit that copy, and rerun the pipeline. For example:
 
 ```bash
 sample=/scratch/boutroux/AKIRA/Brevumdimonas307_T9_22
 mkdir -p "$sample/manual_corrections"
-cp "$sample/circularisation/circular_viruses.fasta" \
-   "$sample/manual_corrections/circular_viruses.fasta"
-# Edit $sample/manual_corrections/circular_viruses.fasta, then from workflow/:
+cp <corrected FASTA> "$sample/manual_corrections/circular_viruses.fasta"
+# After editing $sample/manual_corrections/circular_viruses.fasta, you can launch the pipeline from workflow/:
 snakemake --use-conda --cores 8 pipeline_all_phages pipeline_comparison_phages
 ```
 
-Keep every contig ID and their order; edit sequence bases only. The workflow rejects missing, extra, duplicate, or empty contigs. Editing the manual input triggers publication, CheckV, mapping, annotation, reports, and comparison updates. Assembly selection still uses the automatically corrected candidates; the final CheckV result assesses the manual sequence. The published FASTA under `circularisation/` remains generated and may be replaced. To remove an override, delete the file under `manual_corrections/` and rerun with Snakemake's input-change rerun trigger enabled (the default).
+Editing the manual input triggers publication, CheckV, mapping, annotation, reports, and comparison updates. To remove an override, delete the file under `manual_corrections/` and rerun with Snakemake's input-change rerun trigger enabled (the default).
 
-In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the two mapping rules map all and bacterial-free reads to the corrected viral contigs using theBIGbam `--circular`. `mapped_assembly_info` produces lengths, both coverage values, and Flye circularity metadata. `viral_report` uses [`viral_contig_report.py`](../workflow/scripts/viral_contig_report.py) to write per-sample contig and summary tables.
+## Final assembly reports
 
-The `viral_report_global` checkpoint concatenates those into `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`. This generated sample report is separate from the input sample list. Its sample statuses are:
+In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the two mapping rules map all and bacterial-free reads to the corrected viral contigs using theBIGbam `--circular`. `mapped_assembly_info` produces lengths, both coverage values, per-contig mapped-read percentages, and Flye circularity metadata. Each percentage divides distinct reads mapped to that contig by all reads in the corresponding BAM, including unmapped reads. `viral_report` uses [`viral_contig_report.py`](../workflow/scripts/viral_contig_report.py) to write per-sample contig and summary tables.
+
+The `viral_report_global` checkpoint concatenates those into `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`. Its sample statuses are:
 
 | Status | Meaning |
 | --- | --- |
@@ -210,7 +211,5 @@ python scripts/assembly_attempt_report.py \
   --results-dir /scratch/boutroux/AKIRA \
   --output /scratch/boutroux/AKIRA/reports/assembly_attempts.tsv
 ```
-
-Unavailable accounting remains explicitly unknown. Older attempt outputs without metadata are marked `legacy_unknown`; the script cannot reconstruct their cause from a status file alone.
 
 Completed ordinary failures are valid workflow outputs and are normally reused. Adding samples does not automatically retry old failed attempts. `--rerun-incomplete` retries incomplete execution failures; forcing `select_viral_assembly` only republishes selection. To intentionally retry an old assembly, force its assembler rule while targeting a file for the relevant sample, then let selection update. A selected sample target is `<results_dir>/<sample>/assembly_selection/read_stats.tsv`; the directory itself is not a rule output.

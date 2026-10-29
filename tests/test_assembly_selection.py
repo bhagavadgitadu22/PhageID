@@ -100,6 +100,35 @@ class AssemblySelectionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'BAM references'):
                     bam_depths(bam_path, {'a': 200})
 
+    def test_mapped_percentages_count_reads_including_unmapped(self):
+        import pysam
+        sys.path.insert(0, str(ROOT / 'workflow/scripts'))
+        from assembly_info import bam_metrics
+        with tempfile.TemporaryDirectory() as folder:
+            bam_path = Path(folder) / 'reads.bam'
+            lengths = {'a': 100, 'b': 100}
+            header = {'HD': {'VN': '1.6'}, 'SQ': [{'SN': name, 'LN': length}
+                                                  for name, length in lengths.items()]}
+            with pysam.AlignmentFile(str(bam_path), 'wb', header=header) as bam:
+                for query, flag, reference in [('r1', 0, 0), ('r1', 2048, 0),
+                                                ('r1', 2048, 1), ('r2', 0, 1),
+                                                ('r3', 4, -1), ('r4', 1024, 0)]:
+                    read = pysam.AlignedSegment()
+                    read.query_name = query
+                    read.query_sequence = 'A' * 20
+                    read.flag = flag
+                    read.reference_id = reference
+                    read.reference_start = 0 if reference >= 0 else -1
+                    if reference >= 0:
+                        read.cigar = [(0, 20)]
+                    bam.write(read)
+            _, percentages = bam_metrics(bam_path, lengths)
+            self.assertEqual(percentages, {'a': 25.0, 'b': 50.0})
+
+            with pysam.AlignmentFile(str(bam_path), 'wb', header=header):
+                pass
+            self.assertEqual(bam_metrics(bam_path, lengths)[1], {'a': 'NA', 'b': 'NA'})
+
     def test_short_read_sample_sheet(self):
         source = (ROOT / 'workflow/Snakefile').read_text()
         source = source[source.index('with open(SAMPLES_FILE)'):source.index('def active_viral_samples')]

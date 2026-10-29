@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-"""Report circular-BAM coverage on corrected viruses and Flye assembly metadata."""
+"""Report circular-BAM coverage, mapped-read percentages, and assembly metadata."""
 import argparse
 import csv
 from viral_contig_report import fasta_lengths, read_corrections
 
 
-def bam_depths(path, lengths):
+def bam_metrics(path, lengths):
     import pysam
     totals = dict.fromkeys(lengths, 0)
+    mapped_names = {name: set() for name in lengths}
+    total_reads = 0
     with pysam.AlignmentFile(path, 'rb', check_sq=False) as bam:
         if dict(zip(bam.references, bam.lengths)) != lengths:
             raise ValueError(f'BAM references do not match corrected contigs: {path}')
         circular = 'theBIGbam:circular=true' in bam.header.to_dict().get('CO', [])
         for read in bam.fetch(until_eof=True):
+            # Mapping uses --keep-unmapped, so primary records include every input read.
+            if not read.flag & (256 | 2048):
+                total_reads += 1
             # Same basic exclusion flags as samtools coverage; include supplementary.
             if read.flag & (4 | 256 | 512 | 1024):
                 continue
             name = read.reference_name
+            mapped_names[name].add(read.query_name)
             length = lengths[name]
             position = read.reference_start
             for operation, count in read.cigartuples or []:
@@ -25,7 +31,14 @@ def bam_depths(path, lengths):
                     position += count
                 elif operation in (2, 3):  # D and N consume reference but add no depth.
                     position += count
-    return {name: totals[name] / length for name, length in lengths.items()}
+    depths = {name: totals[name] / length for name, length in lengths.items()}
+    percentages = {name: 100 * len(mapped_names[name]) / total_reads if total_reads else 'NA'
+                   for name in lengths}
+    return depths, percentages
+
+
+def bam_depths(path, lengths):
+    return bam_metrics(path, lengths)[0]
 
 
 def write_info(sample, fasta, corrected, concatemer_report, bam, filtered_bam, flye_info, output):
@@ -34,13 +47,14 @@ def write_info(sample, fasta, corrected, concatemer_report, bam, filtered_bam, f
     corrections = read_corrections(concatemer_report)
     if set(corrections) != set(lengths):
         raise ValueError('Correction records do not match corrected contigs')
-    depths = bam_depths(bam, lengths)
-    filtered_depths = bam_depths(filtered_bam, lengths)
+    depths, mapped = bam_metrics(bam, lengths)
+    filtered_depths, filtered_mapped = bam_metrics(filtered_bam, lengths)
     with open(flye_info, newline='') as handle:
         metadata = {row['#seq_name']: row for row in csv.DictReader(handle, delimiter='\t')}
     with open(output, 'w', newline='') as handle:
         writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
-        writer.writerow(['#seq_name', 'length', 'cov.', 'cov_without_bacteria', 'flye_circularity'])
+        writer.writerow(['#seq_name', 'length', 'cov.', 'cov_without_bacteria',
+                         'percent_mapped', 'percent_mapped_without_bacteria', 'flye_circularity'])
         for name in lengths:
             original = name.removeprefix(sample + '_')
             parent, separator, region = original.partition('|provirus_')
@@ -55,7 +69,10 @@ def write_info(sample, fasta, corrected, concatemer_report, bam, filtered_bam, f
             circular = metadata[parent]['circ.'] if parent in metadata and not separator else 'NA'
             if circular not in {'Y', 'N', 'NA'}:
                 raise ValueError(f'Invalid Flye circularity: {parent}')
-            writer.writerow([name, original_length, depths[name], filtered_depths[name], circular])
+            writer.writerow([name, original_length, depths[name], filtered_depths[name],
+                             f'{mapped[name]:.2f}' if mapped[name] != 'NA' else 'NA',
+                             f'{filtered_mapped[name]:.2f}' if filtered_mapped[name] != 'NA' else 'NA',
+                             circular])
 
 
 def main():

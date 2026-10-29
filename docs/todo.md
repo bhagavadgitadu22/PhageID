@@ -1,0 +1,2 @@
+- I could remove Flye and keep only autocycler
+- I could run all assembly steps and keep the best best on same formula used in dereplication (primarily CheckV quality and for ties (completeness − 5 × contamination + 0.5 × log10(corrected length)))

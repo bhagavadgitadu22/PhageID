@@ -36,6 +36,15 @@ class ConcatemerTests(unittest.TestCase):
         self.assertEqual(str(record.seq), self.unit)
         self.assertEqual(report['num_copies'], 3)
 
+    def test_adjacent_copy_hits_support_three_copy_period(self):
+        record, report = self.correct(self.unit * 3, [
+            hit(1, 100, 101, 200),
+            hit(101, 200, 201, 300),
+        ])
+        self.assertEqual(str(record.seq), self.unit)
+        self.assertEqual(report['repeat_unit_size'], 100)
+        self.assertEqual(report['num_copies'], 3)
+
     def test_whole_sequence_must_support_period(self):
         sequence = self.unit + 'T' * 100 + self.unit
         record, report = self.correct(sequence, [hit(1,200,101,300)])

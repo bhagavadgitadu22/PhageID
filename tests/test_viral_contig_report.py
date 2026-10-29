@@ -29,7 +29,7 @@ class ViralReportTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.p=Path(self.tmp.name)
-        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tflye_circularity\nsample_with_underscores_contig_1\t300\t42\t30\tY\nsample_with_underscores_contig_2\t80\t17\t10\tN\n')
+        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tpercent_mapped\tpercent_mapped_without_bacteria\tflye_circularity\nsample_with_underscores_contig_1\t300\t42\t30\t25.0\t20.0\tY\nsample_with_underscores_contig_2\t80\t17\t10\t50.0\t40.0\tN\n')
         (self.p/'input.fa').write_text('>sample_with_underscores_contig_1\n'+'A'*90+'\n>sample_with_underscores_contig_2\n'+'C'*80+'\n')
         self.concat=[dict(contig_id='sample_with_underscores_contig_1',original_length=300,corrected_length=100,num_copies=3,status='corrected'),dict(contig_id='sample_with_underscores_contig_2',original_length=80,corrected_length=80,num_copies=0,status='no_repeats')]
         self.dtr=[dict(contig_id='sample_with_underscores_contig_1',original_length=100,corrected_length=90),dict(contig_id='sample_with_underscores_contig_2',original_length=80,corrected_length=80)]
@@ -89,6 +89,11 @@ class ViralReportTests(unittest.TestCase):
         self.assertEqual(rows[0]['Assembler'],'flye')
         self.assertEqual(rows[0]['Coverage'],'42')
         self.assertEqual(rows[0]['Coverage_without_bacteria'],'30')
+        self.assertEqual(rows[0]['%_mapped'],'25.0')
+        self.assertEqual(rows[0]['%_mapped_without_bacteria'],'20.0')
+        fields = list(rows[0])
+        self.assertEqual(fields[fields.index('Coverage_without_bacteria') + 1:fields.index('Flye_circularity')],
+                         ['%_mapped', '%_mapped_without_bacteria'])
         self.assertEqual(rows[0]['Flye_circularity'],'Y')
         self.assertEqual(rows[0]['Number_of_concatemers_broken'],'2')
         self.assertEqual(rows[0]['DTR_length_removed'],'10')
@@ -154,7 +159,7 @@ class ViralReportTests(unittest.TestCase):
         dtr=dict(contig_id=name,original_length=100,corrected_length=100)
         write_csv(self.p/'concat.csv',[concat],list(concat))
         write_csv(self.p/'dtr.csv',[dtr],list(dtr))
-        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tflye_circularity\n'+name+'\t100\t42\t30\tNA\n')
+        (self.p/'flye.tsv').write_text('#seq_name\tlength\tcov.\tcov_without_bacteria\tpercent_mapped\tpercent_mapped_without_bacteria\tflye_circularity\n'+name+'\t100\t42\t30\t25.0\t20.0\tNA\n')
         self.report()
         row=read_tsv(self.p/'stats.tsv')[0]
         self.assertEqual((row['Total_bp'],row['Coverage'],row['Flye_circularity']),('100','42','NA'))

@@ -98,20 +98,12 @@ rule genomad_long_reads:
         ) &> {log:q}"""
 
 rule histogram_long_viral_reads:
-    output: os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.txt")
+    output: os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.png")
     input: rules.genomad_long_reads.output
+    conda: os.path.join(ENV_DIR, "viral_read_plot.yaml")
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_histogram_long_viral_reads.log")
     shell:
-        """(date &&
-        awk -F'\t' 'NR>1 {{v=int($2/1000)*1000; count[v]++; if(v>max) max=v}}
-        END {{
-            for(i=0; i<=max; i+=1000) {{
-                printf "%6d-%6d | ", i, i+999
-                for(j=0; j<count[i]; j++) printf "*"
-                printf " (%d)\\n", count[i]
-            }}
-        }}' {input:q} > {output:q} &&
-        date) &> {log:q}"""
+        """Rscript ./scripts/plot_long_viral_reads.R {input:q} {output:q} > {log:q} 2>&1"""
 
 checkpoint assembly_read_status:
     input:
@@ -130,4 +122,4 @@ checkpoint assembly_read_status:
 rule all_reads_stats:
     input: 
         expand(os.path.join(RESULTS_DIR, "{sample}", "reads", "host_filtering_stats.tsv"), sample=PHAGES_LIST),
-        expand(os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.txt"), sample=[sample for sample in PHAGES_LIST if READ_FILES[sample]])
+        expand(os.path.join(RESULTS_DIR, "reports", "viral_long_reads_histograms", "{sample}_viral_long_reads_histogram.png"), sample=[sample for sample in PHAGES_LIST if READ_FILES[sample]])

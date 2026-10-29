@@ -14,7 +14,7 @@ rule thebigbam_mapping:
     shell:
         """(date &&
         if grep -q '^>' {input.assembly:q}; then
-            thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular -o {output.bam:q}
+            thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular --keep-unmapped -o {output.bam:q}
         else
             printf '@HD\tVN:1.6\tSO:coordinate\n@CO\ttheBIGbam:circular=true\n' | samtools view -b -o {output.bam:q} -
             samtools index {output.bam:q}
@@ -36,7 +36,7 @@ rule thebigbam_mapping_without_bacteria:
     shell:
         """(date &&
         if grep -q '^>' {input.assembly:q}; then
-            thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular -o {output.bam:q}
+            thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular --keep-unmapped -o {output.bam:q}
         else
             printf '@HD\tVN:1.6\tSO:coordinate\n@CO\ttheBIGbam:circular=true\n' | samtools view -b -o {output.bam:q} -
             samtools index {output.bam:q}
@@ -91,7 +91,7 @@ checkpoint viral_report_global:
     params:
         attempts_script=workflow.basedir + "/scripts/assembly_attempt_report.py",
         results_dir=RESULTS_DIR,
-        contig_header='Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tManual_correction\tManual_length_change_bp\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy',
+        contig_header='Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\t%_mapped\t%_mapped_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tManual_correction\tManual_length_change_bp\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy',
         sample_header='Sample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tViral_contigs\tTotal_bp\tTotal_corrected_bp\tStatus'
     log: os.path.join(RESULTS_DIR, "logs", "viral_report_global.log")
     shell:

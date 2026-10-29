@@ -4,7 +4,7 @@ import argparse
 import csv
 from pathlib import Path
 
-CONTIG_FIELDS = ['Viral_contig', 'Sample', 'Number_reads', 'Number_reads_without_host', 'Assembler', 'Assembly_method', 'Assembly_used_reads', 'Total_bp', 'Total_corrected_bp', 'Coverage', 'Coverage_without_bacteria', 'Flye_circularity',
+CONTIG_FIELDS = ['Viral_contig', 'Sample', 'Number_reads', 'Number_reads_without_host', 'Assembler', 'Assembly_method', 'Assembly_used_reads', 'Total_bp', 'Total_corrected_bp', 'Coverage', 'Coverage_without_bacteria', '%_mapped', '%_mapped_without_bacteria', 'Flye_circularity',
                  'Number_of_concatemers_broken', 'DTR_length_removed', 'Manual_correction', 'Manual_length_change_bp']
 ANNOTATION_FIELDS = ['CheckV_gene_count', 'CheckV_viral_genes', 'CheckV_host_genes',
                      'CheckV_quality', 'MIUVIG_quality', 'CheckV_completeness', 'CheckV_contamination',
@@ -73,7 +73,7 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
             if not line.strip() or line.startswith('#'):
                 continue
             fields = line.rstrip('\n').split('\t')
-            if len(fields) < 5 or fields[0] in flye:
+            if len(fields) < 7 or fields[0] in flye:
                 raise ValueError(f'Invalid or duplicate assembly metadata in {flye_info}')
             flye[fields[0]] = fields
     rows = []
@@ -82,7 +82,7 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
             raise ValueError(f'No assembly metadata for {contig}')
         metadata = flye[contig]
         original_length = int(metadata[1])
-        circular = metadata[4]
+        circular = metadata[6]
         concatemer, dtr = concatemers[contig], dtrs[contig]
         auto_length = int(dtr['corrected_length'])
         if int(dtr['original_length']) != int(concatemer['corrected_length']):
@@ -100,12 +100,16 @@ def sample_report(sample, fasta, flye_info, concatemer_report, dtr_report, outpu
             raise ValueError(f'Correction lengths do not match for {contig}')
         if int(concatemer['original_length']) != original_length:
             raise ValueError(f'Assembly and correction lengths do not match for {contig}')
-        if metadata[4] not in {'Y', 'N', 'NA'}:
+        if circular not in {'Y', 'N', 'NA'}:
             raise ValueError(f'Invalid assembly circularity for {contig}')
         float(metadata[2])  # Reject missing/malformed coverage rather than inventing a value.
         float(metadata[3])
+        for value in metadata[4:6]:
+            if value != 'NA' and not 0 <= float(value) <= 100:
+                raise ValueError(f'Invalid mapped-read percentage for {contig}')
         rows.append(dict(zip(CONTIG_FIELDS, [
-            contig, sample, *assembly_values, original_length, corrected_length, metadata[2], metadata[3], circular,
+            contig, sample, *assembly_values, original_length, corrected_length,
+            metadata[2], metadata[3], metadata[4], metadata[5], circular,
             int(concatemer['num_copies']) - 1 if concatemer['status'] == 'corrected' else 0,
             int(dtr['original_length']) - auto_length,
             manual_change['Manual_correction'] if manual_change else 'No',

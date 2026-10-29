@@ -22,34 +22,63 @@ snakemake --use-conda --cores 8 pipeline_all_phages            # add sample anno
 snakemake --use-conda --cores 8 pipeline_comparison_phages     # add cross-sample comparisons
 ```
 
-## Assembly
+## Assembly reads when available; otherwise use all preprocessed reads. Long-read samples use Flye after subsampling to approximately 1,000× (hypothesizing a 100 kbp assembly). Short-read-only samples use SPAdes (`--isolate`, single-end input). When both read columns are provided, the long-read route is used.
+3. **Assess each candidate.** Run geNomad, retain viral sequences of at least 2 kbp, prefix contig IDs with the sample name, correct likely concatemers and terminal repeats, then run CheckV. The `candidate_viral_quality` checkpoint makes these results available for assembly selection.
+4. **Rescue with autocycler.** If Flye produces no `Complete` or `High-quality` viral contig, run Autocycler on the same read set. By default, four subsets are assembled independently with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NEC
 
 1. **Preprocess reads.** Combine FASTQ inputs, then trim long reads with Porechop or process short reads with fastp. If a bacterial host genome is supplied, remove host-mapping reads from either read type. The `assembly_read_status` checkpoint records read counts and the percentage removed..
-2. **Assemble.** Start with bacterial-free reads when available; otherwise use all preprocessed reads. Long-read samples use Flye after subsampling to approximately 1,000× (hypothesizing a 100 kbp assembly). Short-read-only samples use SPAdes (`--isolate`, single-end input). When both read columns are provided, the long-read route is used.
-3. **Assess each candidate.** Run geNomad, retain viral sequences of at least 2 kbp, prefix contig IDs with the sample name, correct likely concatemers and terminal repeats, then run CheckV. The `candidate_viral_quality` checkpoint makes these results available for assembly selection.
-4. **Rescue with autocycler.** If Flye produces no `Complete` or `High-quality` viral contig, run Autocycler on the same read set. By default, four subsets are assembled independently with eight assemblers: Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler and Raven, followed by consensus assembly. Keep whichever assembly has the higher best-contig CheckV quality; ties retain Flye. 
+2. **Assemble.** Start with bacterial-freeAT, NextDenovo/NextPolish, Plassembler and Raven, followed by consensus assembly. Keep whichever assembly has the higher best-contig CheckV quality; ties retain Flye. 
 5. **Rescue with all reads.** If the filtered route yields no  `Complete` or `High-quality` viral contigs, repeat steps 2-4 with all reads (including bacterial reads) to allow host-matching prophage recovery. 
 6. **Selection policy** The assembly kept at the end is the one containing the highest CheckV quality viral contigs. Ties prefer filtered reads over all reads, then Flye over Autocycler.
-7. **Viral contig correction.** Concatemers and terminal repeats are corrected so that only one viral copy and one terminal repeat remain. For concatemers, whole-copies are detected from BLASTn results where an inferred copy matches the first copy with ≥95% identity and ≥90% coverage. For terminal repeats, the longest repeat is kept: terminal repeats are considered when they occur within 20 bp of the contig ends and have ≥95% identity.
+7. **Viral contig correction.** Concatemers and terminal repeats are corrected so that only one viral copy and one terminal repeat remain. The pipeline uses self-BLASTn matches to identify contigs containing multiple complete copies of the same viral sequence. It trims a concatemer to one copy when the matches cover at least 90% of the contig and each copy matches the first at ≥95% identity. It then checks for direct repeats at the ends of the resulting sequence. If a repeat reaches within 20 bp of both ends and has ≥95% identity, the pipeline removes one copy of the longest qualifying repeat.
 8. **Report and gate downstream work.** Map all reads and bacterial-free reads onto the selected corrected viral contigs using theBIGbam `--circular`. Write per-sample contig and summary tables. The `viral_report_global` checkpoint concatenates them and allows only samples with retained viral contigs to enter annotation and comparison.
 
 For more details regarding the assembly and selection process, see the [assembly documentation](docs/assembly.md).
 
 ## After assembly
 
-Selected contigs receive Pharokka, Phold, Empathi, Sublyme, DefenseFinder and CheckAMG annotations with PHANOTATE gene predictions. Functional predictions are all combined in a GFF for theBIGbam.
+Selected contigs receive Pharokka, Phold, Empathi, Sublyme, DefenseFinder and CheckAMG annotations with prodigal-gv gene predictions. Functional predictions are all combined in a GFF for theBIGbam.
 Alternative Genotate gene calls with Pharokka protein annotation is also run to find potential overlapping genes. PhageTerm analysis is also run on the viral contigs.
 
-All-versus-all ANI allows to dereplicate contigs at ≥95% ANI and ≥85% aligned fraction (of the member contig, with no minimum representative aligned fraction). Representatives are considered by CheckV quality category, then by `completeness − 5 × contamination + 0.5 × log10(corrected length)` within a category. Contigs without both numeric CheckV values rank after scored contigs in the same category; remaining ties use corrected length and contig ID. It produces a dereplication report, LoVis4u comparisons and vConTACT3 clustering with prokaryotic reference genomes.
+All-versus-all ANI allows to dereplicate contigs at ≥95% ANI and ≥85% aligned fraction (of the member contig, with no minimum representative aligned fraction). Representatives are considered by CheckV quality category, then by `completeness − 5 × contamination + 0.5 × log10(corrected length)` within a category. It produces a dereplication report, LoVis4u comparisons and vConTACT3 clustering with prokaryotic reference genomes.
 
 A theBIGbam database with all viral contigs and all samples using MAG view: one sample contains all its selected viral contigs, with two BAMs per sample (all reads and bacterial-free reads). 
 A second database is made with only representative viral contigs and all samples, using contig view. The `prepare_post_dereplication_mapping` checkpoint resolves sample–representative pairs after clustering.
 
 ## Main reports
 
-- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, automatic correction counts, manual edit status and length change, CheckV metrics and geNomad taxonomy/provirus status. `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`. For manual FASTA edits, see [Manual sequence corrections](docs/assembly.md#manual-sequence-corrections).
+- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, automatic correction counts, manual edit status and length change, CheckV metrics and geNomad taxonomy/provirus status. `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`.
 - `reports/annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). Per-sample tables are `<sample>/pharokka/viral_annotations_report.tsv`.
 - `reports/dereplication_report.tsv`: every contig before dereplication, its selection status, representative, lengths, cluster size, ANI and aligned fractions.
+
+## How can I assess the completeness of my viral contigs?
+
+It may be not enough to assess the completeness of a viral genome based on CheckV alone. The pipeline provides several additional metrics that can be used.
+
+### Size of viral reads
+For each sample, an histogram of the read lengths above 20 kbp detected as viral by geNomad is produced. If your DNA extraction and sequencing method allowed the obtention of sufficiently long reads, you may see a size peak associated to the size of your virus. For example, for this Rahnella_T5_7 sample (`reports/viral_long_reads_histograms/Rahnella311_T5_7_viral_long_reads_histogram.png`), the peak clearly indicates a 63 kbp virus with 88 reads of about this length:
+<p align="center">
+  <img src="image.png" alt="alt text" width="500">
+</p>
+A viral contig very different from this size would indicate a bad assembly.
+
+### Circularisation
+
+If your viral contig was assembled by Flye, the column Flye_circularity in `reports/assembly_report_per_viral_contig.tsv` lets you know whether the contig was circular during the assembly (value Y).
+
+Alternatively, theBIGbam database per sample available in `thebigbam` directory allows to assess the circularity (and thus the completeness) of your viral contig. You can serve the database with `thebigbam serve --db <database>` command, select your contig and sample of interest, click APPLY and then SHOW SUMMARY on the top right. The Topology category gives you the number of circularising reads and the prevalence of those reads among the reads mapping at the end of your viral contig. If you do not see a Topology category, you need to switch from "MAG VIEW" to "CONTIG VIEW" before clickin APPLY.
+
+### Coding density
+
+Another useful metric is the coding density given in `reports/annotation_report_per_viral_contig.tsv`. A low coding density (below 80%) is usually a sign of a poor assembly. In certain cases, with long reads, we observe viral contigs with the expected length but full of assembly errors resulting in a low coding density. For example, for Rahnella311_T5_7, a first sequencing resulted in a very low coding density. That results in a sparse gene map:
+<p align="center">
+  <img src="image-1.png" alt="alt text" width="400">
+</p>
+
+After resequencing and reassembly, a viral contig of a similar length is obtained but with a better contig density (>90%). This is also visually way more pleasing:
+<p align="center">
+  <img src="image-2.png" alt="alt text" width="400">
+</p>
 
 ## Key resources table
 
