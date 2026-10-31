@@ -168,7 +168,15 @@ def comparison_pipeline_inputs(wildcards):
             *rules.lovis4u_pharokka.output, *rules.lovis4u_pharokka_post_dereplication.output,
             *rules.vcontact3.output]
 
-def validate_inputs():
+ASSEMBLY_DATABASES = ("genomad_db", "checkv_db")
+ANNOTATION_DATABASES = ("pharokka_db", "phold_db", "checkamg_db")
+COMPARISON_DATABASES = ("vcontact3_db",)
+
+def assembly_databases():
+    # Plassembler is only used by the long-read Autocycler rescue route.
+    return ASSEMBLY_DATABASES + (("plassembler_db",) if any(READ_FILES.values()) else ())
+
+def validate_inputs(required_databases):
     problems = []
     for sample in PHAGES_LIST:
         for label, path in (("long reads", READ_FILES[sample]),
@@ -186,20 +194,24 @@ def validate_inputs():
         if host and not os.path.isfile(host):
             problems.append(f"{sample} host reference: missing file: {host}")
 
-    for name in ("genomad_db", "checkv_db", "pharokka_db", "phold_db",
-                 "plassembler_db", "checkamg_db", "vcontact3_db"):
+    for name in required_databases:
         path = config[name]
         if not os.path.isdir(path):
             problems.append(f"{name}: missing database directory: {path}")
-    genomad_marker = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
-    if os.path.isdir(config["genomad_db"]) and not os.path.isfile(genomad_marker):
-        problems.append(f"genomad_db: missing marker metadata: {genomad_marker}")
+    if "genomad_db" in required_databases:
+        genomad_marker = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
+        if os.path.isdir(config["genomad_db"]) and not os.path.isfile(genomad_marker):
+            problems.append(f"genomad_db: missing marker metadata: {genomad_marker}")
     if problems:
         raise ValueError("Missing pipeline inputs:\n" + "\n".join(f"- {item}" for item in problems))
 
-### Rules to include
-validate_inputs()
+def preflight_inputs(required_databases):
+    def check(_wildcards):
+        validate_inputs(required_databases)
+        return []
+    return check
 
+### Rules to include
 # Function to recursively include all .smk files
 def include_smk_files(directory):
     for root, _, files in os.walk(directory):
@@ -218,18 +230,22 @@ localrules: assembly_selection_manifest, select_viral_assembly
 # Assembly rules
 rule corrected_assembly_all_phages:
     input:
-        rules.all_reads_stats.input,
-        lambda wildcards: checkpoints.viral_report_global.get().output
+        preflight=preflight_inputs(assembly_databases()),
+        read_stats=rules.all_reads_stats.input,
+        assembly=lambda wildcards: checkpoints.viral_report_global.get().output
 
 # Three rules to rule them all
 rule pipeline_new_phage:
     output: os.path.join(RESULTS_DIR, "{sample}", "done.touch")
-    input: per_sample_pipeline_inputs
+    input:
+        preflight=preflight_inputs(assembly_databases() + ANNOTATION_DATABASES),
+        outputs=per_sample_pipeline_inputs
     shell: """touch {output}"""
 
 rule pipeline_all_phages:
     default_target: True
     input:
+        preflight = preflight_inputs(assembly_databases() + ANNOTATION_DATABASES),
         read_stats = rules.all_reads_stats.input,
         assembly = lambda wildcards: checkpoints.viral_report_global.get().output,
         annotations = rules.viral_annotations_report_global.output,
@@ -237,5 +253,7 @@ rule pipeline_all_phages:
 
 rule pipeline_comparison_phages:
     output: os.path.join(RESULTS_DIR, "combined_viruses", "done.touch")
-    input: comparison_pipeline_inputs
+    input:
+        preflight=preflight_inputs(assembly_databases() + ANNOTATION_DATABASES + COMPARISON_DATABASES),
+        outputs=comparison_pipeline_inputs
     shell: """touch {output}"""

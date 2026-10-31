@@ -17,7 +17,7 @@ Each read input can be a file or a directory. At least one read input is require
 
 Set `samples_file`, `sample_data_root`, `results_dir`, and the reference database paths in `config/config.yaml`. The included study sample sheet uses paths relative to `sample_data_root`. Run from `workflow/` using the Snakemake environment defined in `envs/requirements.yaml`:
 
-At startup, the workflow checks every configured sample read path, host reference, and required database. It reports all missing inputs together before scheduling jobs. For directory read inputs, it also checks for FASTQ files.
+Before scheduling jobs for the entry targets below, the workflow checks every configured sample read path and host reference, plus the databases required by the requested target. The assembly target checks geNomad and CheckV, and also Plassembler when any sample has long reads. The default and per-sample targets additionally check Pharokka, Phold, and CheckAMG; the comparison target additionally checks vConTACT3. It reports all missing inputs together. For directory read inputs, it also checks for FASTQ files.
 
 ```bash
 cd workflow
