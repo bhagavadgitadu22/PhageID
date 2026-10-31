@@ -30,8 +30,6 @@ Each read input can be a file or a directory. At least one read input is require
 
 Set `samples_file`, `sample_data_root`, `results_dir`, and the reference database paths in `config/config.yaml`. The included study sample sheet uses paths relative to `sample_data_root`. Run from `workflow/` using the Snakemake environment defined in `envs/requirements.yaml`:
 
-Before scheduling jobs for the entry targets below, the workflow checks every configured sample read path and host reference, plus the databases required by the requested target. The assembly target checks geNomad and CheckV, and also Plassembler when any sample has long reads. The default and per-sample targets additionally check Pharokka, Phold, and CheckAMG; the comparison target additionally checks vConTACT3. It reports all missing inputs together. For directory read inputs, it also checks for FASTQ files.
-
 ```bash
 cd workflow
 snakemake --use-conda --cores 8 corrected_assembly_all_phages  # assembly and reports
@@ -64,9 +62,13 @@ A second database is made with only representative viral contigs and all samples
 
 ## Main reports
 
-- `<sample>/assembly_stats.tsv`: one row per selected viral contig, with assembler, assembly read set, preprocessing read counts, host-mapping percentage, original and corrected lengths, both coverage values, Flye circularity, automatic correction counts, manual edit status and length change, CheckV metrics and geNomad taxonomy/provirus status. `<sample>/viral_sample_report.tsv`: one sample summary row. Global tables are `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`.
-- `reports/annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). Per-sample tables are `<sample>/pharokka/viral_annotations_report.tsv`.
-- `reports/dereplication_report.tsv`: every contig before dereplication, its selection status, representative, lengths, cluster size, ANI and aligned fractions.
+Several reports can be found in the reports/ directory:
+- `assembly_report_per_sample.tsv`: one row per sample describing assembly method used and number of viral contigs obtained.
+- `assembly_report_per_viral_contig.tsv`: one row per selected viral contig describing sample of origin, assembly method used, original and corrected lengths, coverage depth and percentage of reads mapping, Flye circularity, CheckV metrics and geNomad taxonomy/provirus status.
+- `annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). 
+- `dereplication_report.tsv`: one row per contig before dereplication with its selection status, its representative, and their lengths, cluster size, ANI and aligned fractions.
+
+Per sample reports can be found directly in the sample directory. For example, `<sample>/pharokka/viral_annotations_report.tsv` for the annotation report per viral contig.
 
 ## How can I assess the completeness of my viral contigs?
 
@@ -74,12 +76,12 @@ CheckV assessment alone may not be sufficient to establish viral genome complete
 
 ### Size of viral reads
 
-For every long-read sample, the assembly and default targets require a histogram of read lengths above 20 kbp classified as viral by geNomad. Producing it requires the configured geNomad database and the R/ggplot2 environment. Short-read-only samples have no histogram. When no reads meet the threshold or none is classified as viral, the required output is a labeled empty plot.
+For every long-read sample, the assembly and default targets require a histogram of read lengths above 20 kbp classified as viral by geNomad. For a long-read sample with sufficiently long molecules, a peak gives the expected viral genome length. For example, the Rahnella311_T5_7 histogram (`reports/viral_long_reads_histograms/Rahnella311_T5_7_A1_200826_viral_long_reads_histogram.png`) has a peak near 63 kbp:
 
-For a long-read sample with sufficiently long molecules, a peak may suggest the expected viral genome length. For example, the Rahnella311_T5_7_A1_200826 histogram (`reports/viral_long_reads_histograms/Rahnella311_T5_7_A1_200826_viral_long_reads_histogram.png`) has a peak near 63 kbp:
 <p align="center">
   <img src="docs/assets/Rahnella311_T5_7_A1_200826_viral_long_reads_histogram.png" alt="Histogram of viral long-read lengths with a peak near 63 kbp" width="500">
 </p>
+
 A viral contig different than this size usually indicates a bad assembly. In particular, a contig whose length is an integer multiple of the expected size may represent a concatemer that requires correction to retain a single copy of the viral genome.
 
 ### Read mapping
@@ -95,11 +97,13 @@ Alternatively, theBIGbam database per sample available in `thebigbam` directory 
 ### Coding density
 
 Another useful metric is the coding density given in `reports/annotation_report_per_viral_contig.tsv`. A low coding density (below 80%) is usually a sign of a poor assembly. In certain cases, with long reads, we observe viral contigs with the expected length but full of assembly errors resulting in a low coding density. For example, for Rahnella311_T5_7, a first sequencing resulted in a very low coding density. That results in a sparse gene map:
+
 <p align="center">
   <img src="docs/assets/low_coding_density.png" alt="Sparse gene map for a low coding-density viral assembly" width="400">
 </p>
 
-After resequencing and reassembly, a viral contig of a similar length is obtained but with a better contig density (>90%). This is also visually way more pleasing:
+After resequencing and reassembly, a viral contig of a similar length is obtained but with a better contig density (>90%). This is also visually more pleasing:
+
 <p align="center">
   <img src="docs/assets/high_coding_density.png" alt="Dense gene map for the improved viral assembly" width="400">
 </p>
@@ -107,8 +111,6 @@ After resequencing and reassembly, a viral contig of a similar length is obtaine
 ## Key resources table
 
 ### Software and algorithms
-
-Versions below describe the direct package constraints in `envs/` and the explicit install commands in the workflow. They are not a complete lock of Conda, pip, or downloaded model dependencies.
 
 | REAGENT or RESOURCE | SOURCE | IDENTIFIER |
 | --- | --- | --- |
@@ -163,19 +165,16 @@ Versions below describe the direct package constraints in `envs/` and the explic
 
 | REAGENT or RESOURCE | SOURCE | IDENTIFIER |
 | --- | --- | --- |
-| Short-read sequencing data | [NCBI BioProject PRJNA1423127](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1423127) | Optional third (TruSeq) column in `data/samples.tsv` |
-| Long-read sequencing data | [NCBI BioProject PRJNA1423127](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1423127) | Per-sample read files or directories specified in `data/samples.tsv` |
-| Host reference genomes | [NCBI BioProject PRJNA1423127](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1423127) | Optional host genome FASTA paths specified in `data/samples.tsv` |
 | geNomad database | [geNomad database](https://portal.nersc.gov/genomad/) | v1.9 |
 | CheckV database | [CheckV database](https://portal.nersc.gov/CheckV/) | v1.5 |
 | Pharokka database bundle | [Pharokka](https://github.com/gbouras13/pharokka) | v1.8 |
 | Phold database bundle | [Phold](https://github.com/gbouras13/phold) | Downloaded in August 2025 |
 | Empathi model files | [Empathi](https://huggingface.co/AlexandreBoulay/empathi) | Git LFS files retrieved at revision `7e9cccc00b29e11db1c0bfa066167e8026ef981c` |
 | Sublyme model files | [Rousseau Team; Sublyme](https://github.com/Rousseau-Team/sublyme) | Downloaded with v1.2.2 of the tool |
-| DefenseFinder models | [DefenseFinder models](https://github.com/mdmparis/defense-finder-models) | Downloaded with `defense-finder update`; model release unpinned |
+| DefenseFinder models | [DefenseFinder models](https://github.com/mdmparis/defense-finder-models) | Downloaded with `defense-finder update` in October 2026 |
 | CheckAMG annotation database | [CheckAMG](https://github.com/AnantharamanLab/CheckAMG) | v1.1 |
 | vConTACT3 reference database | [vConTACT3 databases](https://vcontact3.readthedocs.io/en/latest/databases.html) | v230 |
-| LoVis4u HMM profiles | [LoVis4u](https://github.com/art-egorov/lovis4u) | Downloaded with `lovis4u --get-hmms`; profile release unpinned |
+| LoVis4u HMM profiles | [LoVis4u](https://github.com/art-egorov/lovis4u) | Downloaded with `lovis4u --get-hmms` in October 2026 |
 
 ## Citing the pipeline
 
