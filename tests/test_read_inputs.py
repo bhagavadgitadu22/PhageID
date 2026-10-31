@@ -63,6 +63,33 @@ class ReadInputTests(unittest.TestCase):
             empty = p / 'empty.fastq'; empty.touch()
             self.assertNotEqual(self.combine(empty, p / 'output.fastq').returncode, 0)
 
+    def test_preflight_reports_all_missing_inputs(self):
+        start = SOURCE.index('def validate_inputs():')
+        end = SOURCE.index('\nvalidate_inputs()\n', start)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            empty_reads = root / 'empty_reads'
+            empty_reads.mkdir()
+            database_keys = ('genomad_db', 'checkv_db', 'pharokka_db', 'phold_db',
+                             'plassembler_db', 'checkamg_db', 'vcontact3_db')
+            config = {key: str(root / key) for key in database_keys}
+            for key in database_keys:
+                if key != 'checkv_db':
+                    (root / key).mkdir()
+            scope = dict(os=os, PHAGES_LIST=['sample'],
+                         READ_FILES={'sample': str(root / 'missing.fastq')},
+                         SHORT_READS={'sample': str(empty_reads)},
+                         HOSTS_LIST={'sample': str(root / 'missing_host.fasta')},
+                         config=config, read_input_files=read_input_files)
+            exec(SOURCE[start:end], scope)
+            with self.assertRaisesRegex(ValueError, 'Missing pipeline inputs') as error:
+                scope['validate_inputs']()
+            message = str(error.exception)
+            for expected in ('sample long reads', 'sample short reads',
+                             'sample host reference', 'checkv_db',
+                             'genomad_marker_metadata.tsv'):
+                self.assertIn(expected, message)
+
 
 if __name__ == '__main__':
     unittest.main()

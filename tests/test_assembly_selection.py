@@ -146,6 +146,17 @@ class AssemblySelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'No long or short reads'):
                 exec(source, {'SAMPLES_FILE': str(sheet)})
 
+    def test_relative_sample_paths_use_configured_root(self):
+        source = (ROOT / 'workflow/Snakefile').read_text()
+        source = source[source.index('with open(SAMPLES_FILE)'):source.index('def active_viral_samples')]
+        with tempfile.TemporaryDirectory() as folder:
+            sheet = Path(folder) / 'samples.tsv'
+            sheet.write_text('sample\tinput_files/reads.fastq\t\tbacterial_genomes/host.fasta\n')
+            namespace = {'SAMPLES_FILE': str(sheet), 'SAMPLE_DATA_ROOT': '/study'}
+            exec(source, namespace)
+            self.assertEqual(namespace['READ_FILES']['sample'], '/study/input_files/reads.fastq')
+            self.assertEqual(namespace['HOSTS_LIST']['sample'], '/study/bacterial_genomes/host.fasta')
+
 
 if __name__ == '__main__':
     unittest.main()

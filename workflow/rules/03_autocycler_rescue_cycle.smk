@@ -60,7 +60,7 @@ rule autocycler_candidate_assembly:
         subset="[0-9]+"
     params:
         read_type="ont_r10",
-        plassembler_db="/work/river/Databases/plassembler_db",
+        plassembler_db=config["plassembler_db"],
         reads=lambda wc, input: os.path.join(input.subsets, f"sample_{wc.subset}.fastq")
     conda: os.path.join(ENV_DIR, "autocycler.yaml")
     threads: 20

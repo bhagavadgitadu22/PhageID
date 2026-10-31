@@ -66,7 +66,7 @@ rule checkamg:
     output: os.path.join(RESULTS_DIR, "{sample}", "checkamg", "results", "final_results.tsv")
     input:
         pharokka = rules.pharokka_phage.output.faa_raw,
-        db = "/work/river/Databases/checkAMG_db/checkamg_db/CheckAMG_annotate_db_v1.1_20260316/",
+        db = config["checkamg_db"],
         executable = rules.checkamg_install.output
     log: os.path.join(RESULTS_DIR, "logs", "checkamg_{sample}.log")
     conda: os.path.join(ENV_DIR, "checkamg.yaml")

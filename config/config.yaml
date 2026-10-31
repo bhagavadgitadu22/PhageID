@@ -1,3 +1,13 @@
-### TO-MODIFY: Location of directories
+# Set these paths for the machine running the workflow.
 samples_file: "../data/samples.tsv"
 results_dir: "/scratch/boutroux/AKIRA"
+sample_data_root: "/work/river/AKIRA"
+
+# Reference databases used by the rules.
+genomad_db: "/work/river/Databases/genomad_db"
+checkv_db: "/work/river/Databases/checkv-db-v1.5"
+pharokka_db: "/work/river/Databases/pharokka_db"
+phold_db: "/work/river/Databases/phold_db"
+plassembler_db: "/work/river/Databases/plassembler_db"
+checkamg_db: "/work/river/Databases/checkAMG_db/checkamg_db/CheckAMG_annotate_db_v1.1_20260316/"
+vcontact3_db: "/work/river/Databases/vContact3_db"

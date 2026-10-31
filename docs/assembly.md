@@ -6,7 +6,7 @@ Paths below are relative to `results_dir`, except workflow source files. Run Sna
 
 ## Reads and host filtering
 
-The input `data/samples.tsv` has no header: sample name, long-read input, single-end TruSeq input, and optional bacterial host genome. A read input can be a FASTQ file or a directory of FASTQ files, including gzip-compressed files. If both read types are supplied, the long-read route is used; this is not a hybrid assembly.
+The input `data/samples.tsv` has no header: sample name, long-read input, single-end TruSeq input, and optional bacterial host genome. Read and host paths may be absolute or relative to `sample_data_root` in `config/config.yaml`. The included study sheet uses relative paths. A read input can be a FASTQ file or a directory of FASTQ files, including gzip-compressed files. If both read types are supplied, the long-read route is used; this is not a hybrid assembly.
 
 In [`01_preprocessing_reads.smk`](../workflow/rules/01_preprocessing_reads.smk):
 
@@ -175,7 +175,8 @@ Without this option, Snakemake's usual completion markers cannot reliably identi
 To remove a repeat or make another sequence edit, copy the current published FASTA to the stable manual input path, edit that copy, and rerun the pipeline. For example:
 
 ```bash
-sample=/scratch/boutroux/AKIRA/Brevumdimonas307_T9_22
+results_dir=$(python -c 'import yaml; print(yaml.safe_load(open("../config/config.yaml"))["results_dir"])')
+sample="$results_dir/Brevumdimonas307_T9_22"
 mkdir -p "$sample/manual_corrections"
 cp <corrected FASTA> "$sample/manual_corrections/circular_viruses.fasta"
 # After editing $sample/manual_corrections/circular_viruses.fasta, you can launch the pipeline from workflow/:
@@ -207,9 +208,10 @@ The wrapper writes `<attempt-log>.attempt.json` before launching its command, pr
 [`assembly_attempt_report.py`](../workflow/scripts/assembly_attempt_report.py) combines these records and Slurm accounting into `reports/assembly_attempts.tsv` when the global report completes. It includes individual Autocycler helper attempts. While errors block the global report, generate a separate diagnostic report:
 
 ```bash
+results_dir=$(python -c 'import yaml; print(yaml.safe_load(open("../config/config.yaml"))["results_dir"])')
 python scripts/assembly_attempt_report.py \
-  --results-dir /scratch/boutroux/AKIRA \
-  --output /scratch/boutroux/AKIRA/reports/assembly_attempts.tsv
+  --results-dir "$results_dir" \
+  --output "$results_dir/reports/assembly_attempts.tsv"
 ```
 
 Completed ordinary failures are valid workflow outputs and are normally reused. Adding samples does not automatically retry old failed attempts. `--rerun-incomplete` retries incomplete execution failures; forcing `select_viral_assembly` only republishes selection. To intentionally retry an old assembly, force its assembler rule while targeting a file for the relevant sample, then let selection update. A selected sample target is `<results_dir>/<sample>/assembly_selection/read_stats.tsv`; the directory itself is not a rule output.

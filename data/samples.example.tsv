@@ -1,0 +1,2 @@
+example_long	reads/example_long.fastq.gz	NA	hosts/example_host.fasta
+example_short	NA	reads/example_short.fastq.gz	NA

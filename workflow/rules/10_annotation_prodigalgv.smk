@@ -8,7 +8,7 @@ rule pharokka_phage:
         faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa")
     input: 
         virus = rules.finalize_viral_assembly.output.corrected,
-        db = "/work/river/Databases/pharokka_db"
+        db = config["pharokka_db"]
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
@@ -29,7 +29,7 @@ rule phold_phage:
         gbk = os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gbk")
     input: 
         gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
-        db = "/work/river/Databases/phold_db"
+        db = config["phold_db"]
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_phold.log")
     conda: os.path.join(ENV_DIR, "phold.yaml")
     threads: 8

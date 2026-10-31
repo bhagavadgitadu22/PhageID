@@ -19,7 +19,7 @@ rule genotate_pharokka:
     output: os.path.join(RESULTS_DIR, "{sample}", "genotate", "genotate_annotation", "pharokka_proteins_full_merged_output.tsv")
     input:
         genes = rules.genotate_reformatting.output,
-        db = "/work/river/Databases/pharokka_db"
+        db = config["pharokka_db"]
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genotate_annotation.log")
     conda: os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8

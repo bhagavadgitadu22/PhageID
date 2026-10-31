@@ -10,6 +10,7 @@ configfile: os.getcwd()+"/../config/config.yaml"
 ENV_DIR = os.getcwd()+"/../envs"
 SAMPLES_FILE = config["samples_file"]
 RESULTS_DIR = config["results_dir"]
+SAMPLE_DATA_ROOT = config["sample_data_root"]
 
 # list of phages
 with open(SAMPLES_FILE) as f:
@@ -17,19 +18,28 @@ with open(SAMPLES_FILE) as f:
     SHORT_READS = {}
     HOSTS_LIST = {}
 
+    def sample_path(value):
+        import os
+        value = value.strip()
+        if value.lower() in {"", "na", "none", "-"}:
+            return ""
+        if os.path.isabs(value):
+            return value
+        root = globals().get("SAMPLE_DATA_ROOT") or os.path.dirname(os.path.abspath(SAMPLES_FILE))
+        return os.path.normpath(os.path.join(root, value))
+
     for line in f:
         if line.strip():
             fields = line.rstrip("\r\n").split("\t")
             sample, r1 = fields[:2]
             host = fields[3].strip() if len(fields) > 3 else ""
-            missing = {"", "na", "none", "-"}
             r1 = r1.strip()
             short = fields[2].strip() if len(fields) > 2 else ""
-            READ_FILES[sample] = "" if r1.lower() in missing else r1
-            SHORT_READS[sample] = "" if short.lower() in missing else short
+            READ_FILES[sample] = sample_path(r1)
+            SHORT_READS[sample] = sample_path(short)
             if not READ_FILES[sample] and not SHORT_READS[sample]:
                 raise ValueError(f"No long or short reads supplied for {sample}")
-            HOSTS_LIST[sample] = "" if host.lower() in {"", "na", "none", "-"} else host
+            HOSTS_LIST[sample] = sample_path(host)
 
 PHAGES_LIST = list(READ_FILES.keys())
 
@@ -158,7 +168,38 @@ def comparison_pipeline_inputs(wildcards):
             *rules.lovis4u_pharokka.output, *rules.lovis4u_pharokka_post_dereplication.output,
             *rules.vcontact3.output]
 
+def validate_inputs():
+    problems = []
+    for sample in PHAGES_LIST:
+        for label, path in (("long reads", READ_FILES[sample]),
+                            ("short reads", SHORT_READS[sample])):
+            if not path:
+                continue
+            if os.path.isdir(path):
+                try:
+                    read_input_files(path)
+                except ValueError as error:
+                    problems.append(f"{sample} {label}: {error}")
+            elif not os.path.isfile(path):
+                problems.append(f"{sample} {label}: missing file or directory: {path}")
+        host = HOSTS_LIST[sample]
+        if host and not os.path.isfile(host):
+            problems.append(f"{sample} host reference: missing file: {host}")
+
+    for name in ("genomad_db", "checkv_db", "pharokka_db", "phold_db",
+                 "plassembler_db", "checkamg_db", "vcontact3_db"):
+        path = config[name]
+        if not os.path.isdir(path):
+            problems.append(f"{name}: missing database directory: {path}")
+    genomad_marker = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
+    if os.path.isdir(config["genomad_db"]) and not os.path.isfile(genomad_marker):
+        problems.append(f"genomad_db: missing marker metadata: {genomad_marker}")
+    if problems:
+        raise ValueError("Missing pipeline inputs:\n" + "\n".join(f"- {item}" for item in problems))
+
 ### Rules to include
+validate_inputs()
+
 # Function to recursively include all .smk files
 def include_smk_files(directory):
     for root, _, files in os.walk(directory):

@@ -18,7 +18,7 @@ rule vcontact3:
         faa=rules.genemap_for_vcontact3.output.proteins,
         gene_map=rules.genemap_for_vcontact3.output.gene_map,
         lengths=rules.genemap_for_vcontact3.output.lengths,
-        db="/work/river/Databases/vContact3_db"
+        db=config["vcontact3_db"]
     conda: os.path.join(ENV_DIR, "vcontact3.yaml")
     threads: 8
     log: os.path.join(RESULTS_DIR, "logs", "vcontact3.log")

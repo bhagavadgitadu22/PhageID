@@ -7,7 +7,7 @@ rule genomad_candidate:
         summary=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus_summary.tsv")
     input: 
         assembly = candidate_assembly,
-        db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
+        db = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
     wildcard_constraints: assembler="flye|spades|autocycler"
     conda: os.path.join(ENV_DIR, "genomad.yaml")
     threads: 4
@@ -76,7 +76,7 @@ rule checkv_candidate:
     output: 
         checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "checkv", "quality_summary.tsv"),
     input: 
-        db = "/work/river/Databases/checkv-db-v1.5",
+        db = config["checkv_db"],
         assembly = rules.fix_circular_viral_contigs_per_sample_candidate.output.corrected
     wildcard_constraints: assembler="flye|spades|autocycler"
     conda: os.path.join(ENV_DIR, "checkv.yaml")
@@ -150,7 +150,7 @@ rule finalize_viral_assembly:
         dtr=rules.select_viral_assembly.output.dtr_report,
         quality=rules.select_viral_assembly.output.checkv_quality,
         manual=manual_viral_fasta,
-        db="/work/river/Databases/checkv-db-v1.5"
+        db=config["checkv_db"]
     output:
         corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
         concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),

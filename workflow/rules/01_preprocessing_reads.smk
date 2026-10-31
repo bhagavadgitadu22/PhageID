@@ -80,7 +80,7 @@ rule genomad_long_reads:
     output: os.path.join(RESULTS_DIR, "{sample}", "long_reads", "genomad_longer_than_20kbp.{sample}", "longer_than_20kbp.{sample}_summary", "longer_than_20kbp.{sample}_virus_summary.tsv")
     input: 
         reads = rules.extract_reads_longer_than_20kbp.output,
-        db = "/work/river/Databases/genomad_db/genomad_marker_metadata.tsv"
+        db = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
     conda: os.path.join(ENV_DIR, "genomad.yaml")
     threads: 10
     log: os.path.join(RESULTS_DIR, "logs", "{sample}_genomad_long_reads.log")
