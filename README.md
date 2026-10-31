@@ -2,7 +2,20 @@
 
 PhageID assembles phage isolates from Oxford Nanopore long reads or TruSeq single-end short reads, selects viral contigs, assesses their quality and annotates them. Viral contigs are then dereplicated.
 
-## Inputs and running
+## Install
+
+On a Linux system with Conda installed, clone PhageID and create its workflow environment:
+
+```bash
+git clone https://github.com/bhagavadgitadu22/PhageID.git
+cd PhageID
+conda env create -n phageid -f envs/requirements.yaml
+conda activate phageid
+```
+
+Snakemake installs tools for individual rules when run with --use-conda. The first run requires internet access to download environments, software, and models. Configure the input paths below, then run Snakemake from workflow/.
+
+## Inputs
 
 `data/samples.tsv` is tab-separated **without a header**, with columns in this order:
 
