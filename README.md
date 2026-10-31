@@ -53,12 +53,11 @@ For more details regarding the assembly and selection process, see the [assembly
 ## After assembly
 
 Selected contigs receive Pharokka, Phold, Empathi, Sublyme, DefenseFinder and CheckAMG annotations with prodigal-gv gene predictions. Functional predictions are all combined in a GFF for theBIGbam.
-Alternative Genotate gene calls with Pharokka protein annotation is also run to find potential overlapping genes. PhageTerm analysis is also run on the viral contigs.
+The workflow also runs Genotate gene calling with Pharokka protein annotation to find potential overlapping genes. PhageTerm analysis is also run on the viral contigs.
 
-All-versus-all ANI allows to dereplicate contigs at ≥95% ANI and ≥85% aligned fraction (of the member contig, with no minimum representative aligned fraction). Representatives are considered by CheckV quality category, then by `completeness − 5 × contamination + 0.5 × log10(corrected length)` within a category. It produces a dereplication report, LoVis4u comparisons and vConTACT3 clustering with prokaryotic reference genomes.
+All-versus-all ANI is used to dereplicate at ≥95% ANI and ≥85% aligned fraction (of the member contig, with no minimum representative aligned fraction). Representatives are selected by CheckV quality category, then by `completeness − 5 × contamination + 0.5 × log10(corrected length)` within a category. It produces a dereplication report, LoVis4u comparisons and vConTACT3 clustering with prokaryotic reference genomes.
 
-A theBIGbam database with all viral contigs and all samples using MAG view: one sample contains all its selected viral contigs, with two BAMs per sample (all reads and bacterial-free reads). 
-A second database is made with only representative viral contigs and all samples, using contig view. The `prepare_post_dereplication_mapping` checkpoint resolves sample–representative pairs after clustering.
+The workflow builds a theBIGbam database containing all selected viral contigs and samples in MAG view. Each sample has two BAM files: one for all reads and one for host-filtered reads. It also builds a second database containing representative viral contigs and all samples in contig view. The `prepare_post_dereplication_mapping` checkpoint resolves sample–representative pairs after clustering.
 
 ## Main reports
 
@@ -68,7 +67,7 @@ Several reports can be found in the reports/ directory:
 - `annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). 
 - `dereplication_report.tsv`: one row per contig before dereplication with its selection status, its representative, and their lengths, cluster size, ANI and aligned fractions.
 
-Per sample reports can be found directly in the sample directory. For example, `<sample>/pharokka/viral_annotations_report.tsv` for the annotation report per viral contig.
+Per-sample reports can be found directly in the sample directory. For example, `<sample>/pharokka/viral_annotations_report.tsv` for the annotation report per viral contig.
 
 ## How can I assess the completeness of my viral contigs?
 
@@ -86,7 +85,7 @@ A viral contig different than this size usually indicates a bad assembly. In par
 
 ### Read mapping
 
-The columns %_mapped and %_mapped_without_bacteria `reports/assembly_report_per_viral_contig.tsv` indicate the percentage of reads from each sample that map to its assembled viral contigs. For a pure phage culture, more than 90% of reads are expected to map to the corresponding viral contig, particularly when considering %_mapped_without_bacteria, which excludes contaminating reads mapping to the bacterial host genome.
+The columns %_mapped and %_mapped_without_bacteria in `reports/assembly_report_per_viral_contig.tsv` indicate the percentage of reads from each sample that map to its assembled viral contigs. For a pure phage culture, more than 90% of reads are expected to map to the corresponding viral contig, particularly when considering %_mapped_without_bacteria, which excludes contaminating reads mapping to the bacterial host genome.
 
 ### Circularisation
 
@@ -102,7 +101,7 @@ Another useful metric is the coding density given in `reports/annotation_report_
   <img src="docs/assets/low_coding_density.png" alt="Sparse gene map for a low coding-density viral assembly" width="400">
 </p>
 
-After resequencing and reassembly, a viral contig of a similar length is obtained but with a better contig density (>90%). This is also visually more pleasing:
+After resequencing and reassembly, a viral contig of a similar length is obtained but with a better coding density (>90%). This is also visually more pleasing:
 
 <p align="center">
   <img src="docs/assets/high_coding_density.png" alt="Dense gene map for the improved viral assembly" width="400">

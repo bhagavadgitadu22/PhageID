@@ -21,27 +21,21 @@ In [`01_preprocessing_reads.smk`](../workflow/rules/01_preprocessing_reads.smk):
 The read sets used by assembly are:
 
 - `filtered`: bacterial-free reads, used first when a host genome is supplied and at least one read remains.
-- `all`: all **preprocessed** reads, including host-mapping reads. This does not mean the original untrimmed FASTQs.
+- `all`: all **preprocessed** reads, including host-mapping reads.
 
 If no host genome is supplied, or filtering removes every read, assembly starts directly with `all`. All-read rescue can recover sequences that matched the bacterial reference, including possible prophages.
 
 ## Primary assembly
 
-Rules are in [`02_assembly.smk`](../workflow/rules/02_assembly.smk).
+Rules are in [`02_assembly.smk`](../workflow/rules/02_assembly.smk). Both short and long read primary assemblers run through `run_assembly_attempt.py`. 
 
 ### Long reads: Flye
 
-`subsample_reads_flye` runs [`subsample_flye_reads.py`](../workflow/scripts/subsample_flye_reads.py) before `assembly_reads_flye`.
-
-The rule parameters assume a 100,000 bp genome and aim for 1,000× coverage: approximately **100 Mb of read bases**. Smaller read sets are retained. Sampling uses seed 42 and writes a subsampling report; a whole final read can take the total slightly above the target. This is a sampling budget, not an estimate of the actual phage genome length.
-
-Flye uses `--meta --nano-raw`. The rule requires its assembly FASTA, assembly graph, and assembly information table. Full preprocessed reads remain available for mapping and the alternative assembly route.
+`subsample_reads_flye` runs [`subsample_flye_reads.py`](../workflow/scripts/subsample_flye_reads.py) before `assembly_reads_flye`. The rule parameters assume a 100,000 bp genome and aim for 1,000× coverage: approximately **100 Mb of read bases**. Smaller read sets are retained. Flye uses `--meta --nano-raw`.
 
 ### Short reads: SPAdes
 
 If no long reads are supplied, `assembly_reads_spades` uses SPAdes with `-s` for single-end input and `--isolate`. It copies `contigs.fasta` to the common candidate `assembly.fasta` path. Autocycler is not used for short-read-only samples.
-
-Both primary assemblers run through [`run_assembly_attempt.py`](../workflow/scripts/run_assembly_attempt.py), which records success or failure without relying on tool-specific error messages.
 
 ## Candidate assessment
 
@@ -59,14 +53,12 @@ The rules in [`04_assembly_selection.smk`](../workflow/rules/04_assembly_selecti
 | `keep_long_viral_contigs_candidate` | Retain viral sequences at least 2,000 bp long. |
 | `rename_contigs_candidate` | Prefix contig IDs with the sample name to avoid collisions between samples. |
 | `fix_circular_viral_contigs_per_sample_candidate` | Run [`correct_phage_contigs.py`](../workflow/scripts/correct_phage_contigs.py) to correct likely concatemers and terminal repeats, producing corrected FASTA and two CSV reports. |
-| `checkv_candidate` | Assess the corrected viral sequences. Recreate the candidate's CheckV directory on each scheduled run so old gene predictions cannot be reused with a changed FASTA. Empty viral input skips CheckV and writes a header-only quality table. |
+| `checkv_candidate` | Assess the corrected viral sequences. |
 | `candidate_viral_quality` checkpoint | Expose the completed quality table and assembly status to selection. |
-
-Correction therefore happens **before CheckV and selection**. No viral contigs is a valid assessment outcome; a CheckV, geNomad, or correction execution error still fails its own rule.
 
 ## Rescue and final choice
 
-Selection functions are defined in [`Snakefile`](../workflow/Snakefile): `candidate_choice`, `selected_candidate_inputs`, and `selection_manifest_inputs`.
+Several assembly steps are tried depending on the read set (short or long) until a good-enough assembly is obtained. Selection functions are defined in [`Snakefile`](../workflow/Snakefile): `candidate_choice`, `selected_candidate_inputs`, and `selection_manifest_inputs`.
 
 An attempt is ranked by its best retained viral contig:
 
@@ -94,8 +86,6 @@ For example, filtered Flye with `Low-quality`, filtered Autocycler with `Medium-
 2. If that set is `filtered` and no `Complete` or `High-quality` viral contig is found, retry SPAdes with `all` reads.
 3. Keep the result with the higher best-contig quality. Ties keep the filtered result.
 
-Ordinary assembly failures are ranked below completed assemblies and allow these rescue steps to proceed. Resource and configuration errors are handled separately, as described below.
-
 ## Autocycler internals
 
 Rules are in [`03_autocycler_rescue_cycle.smk`](../workflow/rules/03_autocycler_rescue_cycle.smk).
@@ -103,44 +93,19 @@ Rules are in [`03_autocycler_rescue_cycle.smk`](../workflow/rules/03_autocycler_
 | Rule or script | Role |
 | --- | --- |
 | `autocycler_genome_size` | Use `autocycler_genome_size` from configuration. The default `auto` invokes the helper's estimation; a failed estimation falls back to 100,000 bp. |
-| `autocycler_subsample` | Generate subsets from the current read set. `params.subset_count` controls their number; it is currently four. Ordinary subsampling failure creates a rejection marker and clears partial subset FASTQs. |
-| `autocycler_candidate_jobs` | Expand the assembler × subset combinations using the same subset-count parameter. |
-| `autocycler_candidate_assembly` | Run one helper assembler on one subset in a separate job, through `run_assembly_attempt.py`. A subsampling rejection skips the helper and records a failed attempt. |
+| `autocycler_subsample` | Generate subsets from the current read set. `params.subset_count` controls their number (default 4). |
+| `autocycler_candidate_jobs` | Expand the assembler × subset combinations using the same subset-count parameter. The eight helper assemblers are Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler, and Raven. With four subsets this gives 32 candidate jobs per attempted read set. |
+| `autocycler_candidate_assembly` | Run one helper assembler on one subset in a separate job, through `run_assembly_attempt.py`. |
 | `autocycler_candidate_assemblies` | Use [`collect_autocycler_candidates.py`](../workflow/scripts/collect_autocycler_candidates.py) to collect successful candidate FASTAs and write `candidate_status.tsv`. |
 | `assembly_reads_autocycler` | Run [`autocycler_consensus.sh`](../workflow/scripts/autocycler_consensus.sh) through the assembly wrapper. |
 
-The eight helper assemblers are Canu, Flye, metaMDBG, miniasm/Minipolish, NECAT, NextDenovo/NextPolish, Plassembler, and Raven. With four subsets this gives 32 candidate jobs per attempted read set. Subsets are chosen by Autocycler; four subsets does not imply exactly 25% of the reads in each.
-
-The helper read type is `ont_r10`. Plassembler additionally receives `--args --no_chromosome`, with `PLASSEMBLER_DB` exported from the rule parameter. Other helpers use their standard arguments.
-
 Consensus requires at least two successful candidate assemblies. The script runs compress, cluster, trim and resolve for passing clusters, then combine. Too few successful candidates, no clusters passing QC, or another ordinary command failure records a failed consensus and permits the selection policy to continue.
-
-There is no extra pipeline minimum-read threshold. For example, Autocycler's own “input reads are too shallow to subset” rejection becomes a failed filtered attempt, after which selection can try all reads.
 
 ## Ordinary failures versus execution errors
 
-An ordinary failure is **not proof of a biological problem**. The pipeline records `assembler_failed` because the same exit code could also come from a software or parameter issue; its log remains available for investigation.
+Assembly errors need to be distinguished from jobs that were interrupted midway. Flye can fail because there are too few long reads to assemble disjointigs, for example, which is an acceptable error. Conversely, an assembly job failing because of a Slurm error (OOM out-of-memory, timeout, node failure, cancellation, preemption, or another failed job/step) means the assembly did not finish its job but could work if given more resources. 
 
-| Event | Handling |
-| --- | --- |
-| Assembler returns an ordinary nonzero exit code | Discard partial assembly outputs, record `failed`, and allow rescue. No error-message parsing. |
-| Assembler exits zero but required outputs are missing or empty | Record a failed attempt and allow rescue. |
-| Flye cannot find long enough reads or assemble disjointigs | Ordinary assembler failure; allow rescue. |
-| Autocycler subsampling fails ordinarily, or consensus has no usable clusters | Ordinary failed attempt; allow rescue. |
-| Executable cannot be launched, or shell reports exit 126/127 | Execution/configuration error; fail the job. |
-| Command dies from a signal, including a shell's signal-style exit code | Execution error; fail the job. |
-| Slurm reports OOM, timeout, node failure, cancellation, preemption, or another failed job/step | Execution error; fail the job, even if the wrapper returned successfully. |
-| Assessment, source validation, or publication fails | Fail the rule rather than publish incomplete or inconsistent selected results. |
-
-### Enable Slurm checks
-
-The scheduler distinction requires [`slurm_cluster_status.py`](../workflow/scripts/slurm_cluster_status.py). Add this to the existing Snakemake cluster command, from `workflow/`:
-
-```bash
---cluster-status "python scripts/slurm_cluster_status.py"
-```
-
-For example:
+To distinguish ordinary failed jobs from interrupted ones, the Snakemake run requires [`slurm_cluster_status.py`](../workflow/scripts/slurm_cluster_status.py):
 
 ```bash
 SMK_CLUSTER="sbatch -q {cluster.qos} -N {cluster.nodes} -n {cluster.n} -c {threads} -t {cluster.time}"
@@ -152,66 +117,43 @@ snakemake -j 200 --local-cores 1 --use-conda --conda-frontend conda \
   -p viral_report_global
 ```
 
-The checker queries `sacct` for the parent job **and its steps**. Any failed step overrides a successful parent state, particularly when an assembler subprocess was killed but its wrapper survived. Completed jobs return `success`; active or not-yet-accounted jobs return `running`. Accounting query errors are real errors, not assumed success. The controller must have access to `sacct`.
-
-Without this option, Snakemake's usual completion markers cannot reliably identify a scheduler failure hidden by a surviving wrapper. Local runs detect direct command interruptions but have no Slurm accounting. Memory allocations remain the responsibility of the submission setup; this change adds no Flye memory request.
-
-`--keep-going` permits independent samples to progress after a job error. It does not make the global report complete while one of its dependencies is still failing.
+The checker queries `sacct` for the parent job **and its steps**. The wrapper writes `<attempt-log>.attempt.json` before launching its command, preserving the Slurm job ID, log path, execution status, outcome, and exit code. This permits diagnosis even when a whole job is killed before cleanup.
 
 ## Final assembly selection
 
-`assembly_selection_manifest` is an **ordinary local rule**, not a checkpoint. It waits for selection's upstream checkpoints to resolve, then uses [`assembly_selection_manifest.py`](../workflow/scripts/assembly_selection_manifest.py) to write `assembly_selection/selected_sources.json`. The manifest records the chosen assembler, read set, and exact source paths. It also tracks the quality/status files of assessed alternatives so changes can trigger reselection.
+`assembly_selection_manifest` waits for selection's upstream checkpoints to resolve, then uses [`assembly_selection_manifest.py`](../workflow/scripts/assembly_selection_manifest.py) to record the chosen assembler, read set, and exact source paths. It also tracks the quality/status files of assessed alternatives so changes can trigger reselection.
 
-`select_viral_assembly` is another ordinary local rule. It reads the manifest, validates all sources, and computes read statistics before publishing the selected automatic outputs. Its outputs include:
+Another rule, `select_viral_assembly`, reads the manifest, validates all sources, and computes read statistics before publishing the selected automatic outputs. Its outputs include:
 
 - `assembly_selection/assembly.fasta`: original selected assembly.
 - `assembly_selection/automatic_circular_viruses.fasta`: automatically corrected viral contigs.
 - Selected CheckV/geNomad tables, automatic correction reports, assembler/status files, and `assembly_selection/read_stats.tsv`.
 
-`finalize_viral_assembly` publishes `circularisation/circular_viruses.fasta`, its correction reports, and `checkv/quality_summary.tsv`. Without a manual override, it copies the automatic FASTA and CheckV table. With an override, it reruns CheckV on the final sequence. The separate `circularisation/manual_corrections_report.tsv` records which sequences changed and their length differences; automatic concatemer and DTR counts remain attributed only to automatic correction.
-
-### Manual sequence corrections
-
-To remove a repeat or make another sequence edit, copy the current published FASTA to the stable manual input path, edit that copy, and rerun the pipeline. For example:
+You can correct manually this automatic assembly if needed. It can be useful to remove a repeat or make another sequence edit for example. To do that, copy `assembly_selection/automatic_circular_viruses.fasta`, correct it (you need to keep the same contig IDs though) and put the corrected FASTA to the stable manual input path:
 
 ```bash
 results_dir=$(python -c 'import yaml; print(yaml.safe_load(open("../config/config.yaml"))["results_dir"])')
 sample="$results_dir/Brevumdimonas307_T9_22"
 mkdir -p "$sample/manual_corrections"
-cp <corrected FASTA> "$sample/manual_corrections/circular_viruses.fasta"
-# After editing $sample/manual_corrections/circular_viruses.fasta, you can launch the pipeline from workflow/:
-snakemake --use-conda --cores 8 pipeline_all_phages pipeline_comparison_phages
+cp "<YOUR_VIRAL_GENOME>.fasta" "$sample/manual_corrections/circular_viruses.fasta"
 ```
 
-Editing the manual input triggers publication, CheckV, mapping, annotation, reports, and comparison updates. To remove an override, delete the file under `manual_corrections/` and rerun with Snakemake's input-change rerun trigger enabled (the default).
+The rule `finalize_viral_assembly` publishes the final files for a sample. If no manual override was done, it will use the outputs from the `select_viral_assembly` rule to publish `circularisation/circular_viruses.fasta`, its correction reports, and `checkv/quality_summary.tsv`. With an override, it copies the manual viral genome to `circularisation/circular_viruses.fasta` and reruns CheckV on the final sequence. The separate `circularisation/manual_corrections_report.tsv` records which sequences changed and their length differences.
+
+Editing the manual input at any time triggers the rule `finalize_viral_assembly` again. To remove an override, delete the file under `manual_corrections/` and rerun Snakemake.
 
 ## Final assembly reports
 
-In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the two mapping rules map all and bacterial-free reads to the corrected viral contigs using theBIGbam `--circular`. `mapped_assembly_info` produces lengths, both coverage values, per-contig mapped-read percentages, and Flye circularity metadata. Each percentage divides distinct reads mapped to that contig by all reads in the corresponding BAM, including unmapped reads. `viral_report` uses [`viral_contig_report.py`](../workflow/scripts/viral_contig_report.py) to write per-sample contig and summary tables.
+In [`05_assembly_report.smk`](../workflow/rules/05_assembly_report.smk), the per-sample reports and global sample summary mentioned in [the README](../README.md) contain a column Status explaining the assembly status. Three values are possible:
+- `ready`: At least one retained viral contig; annotation and comparison are enabled. High CheckV quality is not required for this status.
+- `no_viral_contigs`: An assembly completed, but no viral contigs survived selection. Keep its summary row and skip downstream annotation.
+- `assembly_failed`: All assessed assembly alternatives failed ordinarily. Keep its summary row and skip downstream annotation. This is not a biological diagnosis.
 
-The `viral_report_global` checkpoint concatenates those into `reports/assembly_report_per_viral_contig.tsv` and `reports/assembly_report_per_sample.tsv`. Its sample statuses are:
+An unresolved execution error prevents the final report from completing for that sample; it is not silently converted to `assembly_failed` (see [Ordinary failures versus execution errors](#ordinary-failures-versus-execution-errors)).
 
-| Status | Meaning |
-| --- | --- |
-| `ready` | At least one retained viral contig; annotation and comparison are enabled. High CheckV quality is not required for this status. |
-| `no_viral_contigs` | An assembly completed, but no viral contigs survived selection. Keep its summary row and skip downstream annotation. |
-| `assembly_failed` | All assessed assembly alternatives failed ordinarily. Keep its summary row and skip downstream annotation. This is not a biological diagnosis. |
-
-An unresolved execution error prevents the final report from completing for that sample; it is not silently converted to `assembly_failed`.
-
-Both reports use underscore-separated headers. `Number_reads` counts all preprocessed reads, `Number_reads_without_host` counts retained host-filtered reads, `Assembler` identifies the selected tool, `Assembly_method` indicates `all` or `bacterial free`, and `Assembly_used_reads` counts the actual assembly input after any Flye subsampling. `Manual_correction` and `Manual_length_change_bp` distinguish manual edits from automated DTR removal. Without a host reference, the first two read counts are equal. Sample metadata remains available even when no viral contigs are retained.
-
-### Attempt diagnostics and retries
-
-The wrapper writes `<attempt-log>.attempt.json` before launching its command, preserving the Slurm job ID, log path, execution status, outcome, and exit code. This permits diagnosis even when a whole job is killed before cleanup.
-
-[`assembly_attempt_report.py`](../workflow/scripts/assembly_attempt_report.py) combines these records and Slurm accounting into `reports/assembly_attempts.tsv` when the global report completes. It includes individual Autocycler helper attempts. While errors block the global report, generate a separate diagnostic report:
+A report showing the outcome of each assembly attempt is made by [`assembly_attempt_report.py`](../workflow/scripts/assembly_attempt_report.py) into `reports/assembly_attempts.tsv` when the global report completes. It includes individual Autocycler helper attempts. If errors block the global report, you can generate a separate diagnostic report with:
 
 ```bash
 results_dir=$(python -c 'import yaml; print(yaml.safe_load(open("../config/config.yaml"))["results_dir"])')
-python scripts/assembly_attempt_report.py \
-  --results-dir "$results_dir" \
-  --output "$results_dir/reports/assembly_attempts.tsv"
+python scripts/assembly_attempt_report.py --results-dir "$results_dir" --output "$results_dir/reports/assembly_attempts.tsv"
 ```
-
-Completed ordinary failures are valid workflow outputs and are normally reused. Adding samples does not automatically retry old failed attempts. `--rerun-incomplete` retries incomplete execution failures; forcing `select_viral_assembly` only republishes selection. To intentionally retry an old assembly, force its assembler rule while targeting a file for the relevant sample, then let selection update. A selected sample target is `<results_dir>/<sample>/assembly_selection/read_stats.tsv`; the directory itself is not a rule output.
