@@ -1,49 +1,66 @@
 # protein annotation of a phage
 rule pharokka_phage:
-    output: 
-        gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
-        gff = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
-        functions = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka_cds_functions.tsv"),
-        faa = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv.faa"),
-        faa_raw = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa")
-    input: 
-        virus = rules.finalize_viral_assembly.output.corrected,
-        db = config["pharokka_db"]
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log")
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
+    output:
+        gbk=os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
+        gff=os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff"),
+        functions=os.path.join(
+            RESULTS_DIR, "{sample}", "pharokka", "pharokka_cds_functions.tsv"
+        ),
+        faa=os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv.faa"),
+        faa_raw=os.path.join(RESULTS_DIR, "{sample}", "pharokka", "prodigal-gv_raw.faa"),
+    input:
+        virus=rules.finalize_viral_assembly.output.corrected,
+        db=config["pharokka_db"],
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka.log"),
+    conda:
+        os.path.join(ENV_DIR, "pharokka.yaml")
     threads: 8
     shell:
         """(date && pharokka.py --force -t {threads} -d {input.db} -i {input.virus} -g prodigal-gv --keep_raw_prodigal -o $(dirname {output.gbk}) && date) &> {log}"""
 
+
 rule pharokka_plot:
-    output: directory(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots"))
-    input: rules.pharokka_phage.output.gbk
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log")
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
+    output:
+        directory(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "plots")),
+    input:
+        rules.pharokka_phage.output.gbk,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_pharokka_plot.log"),
+    conda:
+        os.path.join(ENV_DIR, "pharokka.yaml")
     shell:
         """(date && python ./scripts/plot_pharokka.py --genbank {input:q} --output-dir {output:q} && date) &> {log:q}"""
+
 
 # Annotation with phold in addition
 rule phold_phage:
     output:
-        gbk = os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gbk")
-    input: 
-        gbk = os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
-        db = config["phold_db"]
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_phold.log")
-    conda: os.path.join(ENV_DIR, "phold.yaml")
+        gbk=os.path.join(RESULTS_DIR, "{sample}", "phold", "phold.gbk"),
+    input:
+        gbk=os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gbk"),
+        db=config["phold_db"],
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_phold.log"),
+    conda:
+        os.path.join(ENV_DIR, "phold.yaml")
     threads: 8
     shell:
         """(date && phold run -t {threads} --force -i {input.gbk} -d {input.db} --cpu -o $(dirname {output.gbk}) && date) &> {log}"""
 
+
 # empathi on viral contigs
 rule empathi_install:
-    output: directory(os.path.join(RESULTS_DIR, "software", "empathi"))
-    conda: os.path.join(ENV_DIR, "empathi.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "empathi_install.log")
+    output:
+        directory(os.path.join(RESULTS_DIR, "software", "empathi")),
+    conda:
+        os.path.join(ENV_DIR, "empathi.yaml")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "empathi_install.log"),
     params:
-        revision="7e9cccc00b29e11db1c0bfa066167e8026ef981c"
-    message: "Installing empathi"
+        revision="7e9cccc00b29e11db1c0bfa066167e8026ef981c",
+    message:
+        "Installing empathi"
     shell:
         """(date && 
         mkdir -p {output:q} &&
@@ -59,17 +76,24 @@ rule empathi_install:
         {output:q}/venv/bin/python -m pip check &&
         date) &> {log}"""
 
+
 rule empathi:
-    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses.csv")
-    input: 
-        pharokka = rules.pharokka_phage.output.faa,
-        installation = rules.empathi_install.output
-    log: os.path.join(RESULTS_DIR, "logs", "empathi_{sample}.log")
-    conda: os.path.join(ENV_DIR, "empathi.yaml")
+    output:
+        os.path.join(
+            RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses.csv"
+        ),
+    input:
+        pharokka=rules.pharokka_phage.output.faa,
+        installation=rules.empathi_install.output,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "empathi_{sample}.log"),
+    conda:
+        os.path.join(ENV_DIR, "empathi.yaml")
     params:
-        hf_home=os.path.join(RESULTS_DIR, "software", "huggingface")
+        hf_home=os.path.join(RESULTS_DIR, "software", "huggingface"),
     threads: 4
-    message: "Running empathi on all viral contigs"
+    message:
+        "Running empathi on all viral contigs"
     shell:
         """(date && 
         mkdir -p $(dirname $(dirname {output})) &&
@@ -79,51 +103,81 @@ rule empathi:
             --models_folder {input.installation:q}/empathi/models --output_folder $(dirname $(dirname {output})) --threads {threads} --confidence 0.50 &&
         date) &> {log}"""
 
+
 rule sublyme:
-    output: os.path.join(RESULTS_DIR, "{sample}", "sublyme", "sublyme_predictions.csv")
-    input: rules.pharokka_phage.output.faa
-    log: os.path.join(RESULTS_DIR, "logs", "sublyme_{sample}.log")
-    conda: os.path.join(ENV_DIR, "sublyme.yaml")
+    output:
+        os.path.join(RESULTS_DIR, "{sample}", "sublyme", "sublyme_predictions.csv"),
+    input:
+        rules.pharokka_phage.output.faa,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "sublyme_{sample}.log"),
+    conda:
+        os.path.join(ENV_DIR, "sublyme.yaml")
     threads: 4
-    message: "Running sublyme on all viral contigs"
+    message:
+        "Running sublyme on all viral contigs"
     shell:
         """(date &&
         mkdir -p $(dirname {output}) &&
         sublyme {input} --output_folder $(dirname {output}) --threads {threads} &&
         date) &> {log:q}"""
 
+
 rule combine_empathi_with_sublyme:
-    output: os.path.join(RESULTS_DIR, "{sample}", "empathi", "viruses", "predictions_viruses_with_sublyme.csv")
+    output:
+        os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "empathi",
+            "viruses",
+            "predictions_viruses_with_sublyme.csv",
+        ),
     input:
         empathi=rules.empathi.output,
-        sublyme=rules.sublyme.output
-    log: os.path.join(RESULTS_DIR, "logs", "combine_empathi_with_sublyme_{sample}.log")
-    message: "Combining Empathi and Sublyme predictions"
+        sublyme=rules.sublyme.output,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "combine_empathi_with_sublyme_{sample}.log"),
+    message:
+        "Combining Empathi and Sublyme predictions"
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """(date &&
         python ./scripts/combine_empathi_with_sublyme.py --empathi {input.empathi:q} --sublyme {input.sublyme:q} --output {output:q} &&
         date) > {log:q} 2>&1"""
 
+
 # Report coding density and Pharokka function counts for each selected viral contig.
 rule viral_annotations_report:
-    output: os.path.join(RESULTS_DIR, "{sample}", "pharokka", "viral_annotations_report.tsv")
+    output:
+        os.path.join(
+            RESULTS_DIR, "{sample}", "pharokka", "viral_annotations_report.tsv"
+        ),
     input:
         fasta=rules.finalize_viral_assembly.output.corrected,
         gff=rules.pharokka_phage.output.gff,
-        functions=rules.pharokka_phage.output.functions
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_viral_annotations_report.log")
+        functions=rules.pharokka_phage.output.functions,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_viral_annotations_report.log"),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """python ./scripts/viral_annotations_report.py --sample {wildcards.sample:q} --fasta {input.fasta:q} --gff {input.gff:q} --functions {input.functions:q} --output {output:q} > {log:q} 2>&1"""
 
+
 # Concatenate reports for samples with retained viral contigs.
 rule viral_annotations_report_global:
-    output: os.path.join(RESULTS_DIR, "reports", "annotation_report_per_viral_contig.tsv")
+    output:
+        os.path.join(RESULTS_DIR, "reports", "annotation_report_per_viral_contig.tsv"),
     input:
         report=lambda wc: checkpoints.viral_report_global.get().output.samples,
-        reports=active_sample_files(rules.viral_annotations_report.output[0])
+        reports=active_sample_files(rules.viral_annotations_report.output[0]),
     params:
-        header="Viral_contig\tSample\tCoding_density_percent\tCDS\tconnector\tDNA, RNA and nucleotide metabolism\thead and packaging\tintegration and excision\tlysis\tmoron, auxiliary metabolic gene and host takeover\tother\ttail\ttranscription regulation\tunknown function\ttRNAs\tCRISPRs\ttmRNAs\tVFDB_Virulence_Factors\tCARD_AMR_Genes"
-    log: os.path.join(RESULTS_DIR, "logs", "viral_annotations_report_global.log")
+        header="Viral_contig\tSample\tCoding_density_percent\tCDS\tconnector\tDNA, RNA and nucleotide metabolism\thead and packaging\tintegration and excision\tlysis\tmoron, auxiliary metabolic gene and host takeover\tother\ttail\ttranscription regulation\tunknown function\ttRNAs\tCRISPRs\ttmRNAs\tVFDB_Virulence_Factors\tCARD_AMR_Genes",
+    log:
+        os.path.join(RESULTS_DIR, "logs", "viral_annotations_report_global.log"),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """(
             mkdir -p $(dirname {output:q})

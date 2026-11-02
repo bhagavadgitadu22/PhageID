@@ -1,163 +1,275 @@
 # dereplication of the viruses
 rule combine_all_viruses:
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses.fna")
-    input: active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"))
-    log: os.path.join(RESULTS_DIR, "logs", "combine_all_viruses.log")
-    message: "Combining all viruses from all samples"
+    output:
+        os.path.join(
+            RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses.fna"
+        ),
+    input:
+        active_sample_files(
+            os.path.join(
+                RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"
+            )
+        ),
+    log:
+        os.path.join(RESULTS_DIR, "logs", "combine_all_viruses.log"),
+    message:
+        "Combining all viruses from all samples"
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """
         (date && mkdir -p $(dirname {output}) &&
         cat {input} > {output} && date) &> {log}
         """
 
+
 rule blast_before_dereplication:
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "blastn_all_viruses.tsv")
-    input: rules.combine_all_viruses.output
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
+    output:
+        os.path.join(
+            RESULTS_DIR, "combined_viruses", "dereplication", "blastn_all_viruses.tsv"
+        ),
+    input:
+        rules.combine_all_viruses.output,
+    conda:
+        os.path.join(ENV_DIR, "checkv.yaml")
     threads: 8
-    log: os.path.join(RESULTS_DIR, "logs", "blastn_all_viruses.log")
-    message: "BLAST all-vs-all of the viruses"
+    log:
+        os.path.join(RESULTS_DIR, "logs", "blastn_all_viruses.log"),
+    message:
+        "BLAST all-vs-all of the viruses"
     shell:
         """
         (date && blastn -num_threads {threads} -query {input} -subject {input} -outfmt '6 std qlen slen' -max_target_seqs 10000 -out {output} &&
         date) &> {log}
         """
 
+
 rule ani_for_dereplication:
-    output: 
-        ani_results = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "ani_all_viruses.tsv"),
-        clustering_results = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "clusters_all_viruses.tsv"),
+    output:
+        ani_results=os.path.join(
+            RESULTS_DIR, "combined_viruses", "dereplication", "ani_all_viruses.tsv"
+        ),
+        clustering_results=os.path.join(
+            RESULTS_DIR,
+            "combined_viruses",
+            "dereplication",
+            "clusters_all_viruses.tsv",
+        ),
     input:
-        blast_results = rules.blast_before_dereplication.output, 
-        fna_viruses = rules.combine_all_viruses.output,
-        quality = lambda wc: checkpoints.viral_report_global.get().output.contigs
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "ani_all_viruses.log")
-    message: "ANI for dereplication of the viral dataset"
+        blast_results=rules.blast_before_dereplication.output,
+        fna_viruses=rules.combine_all_viruses.output,
+        quality=lambda wc: checkpoints.viral_report_global.get().output.contigs,
+    conda:
+        os.path.join(ENV_DIR, "checkv.yaml")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "ani_all_viruses.log"),
+    message:
+        "ANI for dereplication of the viral dataset"
     shell:
         """
         (date && python scripts/ani_calc.py -i {input.blast_results} -o {output.ani_results} &&
         python scripts/ani_clust.py --fna {input.fna_viruses:q} --ani {output.ani_results:q} --quality-report {input.quality:q} --out {output.clustering_results:q} --min_ani 95 --min_tcov 85 --min_qcov 0 && date) &> {log}
         """
 
+
 rule viruses_dereplicated:
     output:
-        list_viruses_derep = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses_dereplicated.txt"),
-        fna_viruses_derep = os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "all_viruses_dereplicated.fna"),
+        list_viruses_derep=os.path.join(
+            RESULTS_DIR,
+            "combined_viruses",
+            "dereplication",
+            "all_viruses_dereplicated.txt",
+        ),
+        fna_viruses_derep=os.path.join(
+            RESULTS_DIR,
+            "combined_viruses",
+            "dereplication",
+            "all_viruses_dereplicated.fna",
+        ),
     input:
-        fna_viruses = rules.combine_all_viruses.output,
-        clustering_results = rules.ani_for_dereplication.output.clustering_results,
-    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "dereplication_all_viruses.log")
-    message: "Dereplication of the viral dataset"
+        fna_viruses=rules.combine_all_viruses.output,
+        clustering_results=rules.ani_for_dereplication.output.clustering_results,
+    conda:
+        os.path.join(ENV_DIR, "preprocessing.yaml")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "dereplication_all_viruses.log"),
+    message:
+        "Dereplication of the viral dataset"
     shell:
         """
         (date && cut -f 1 {input.clustering_results} > {output.list_viruses_derep} &&
         seqtk subseq {input.fna_viruses} {output.list_viruses_derep} > {output.fna_viruses_derep} && date) &> {log}
         """
 
+
 rule dereplication_report:
-    output: os.path.join(RESULTS_DIR, "reports", "dereplication_report.tsv")
+    output:
+        os.path.join(RESULTS_DIR, "reports", "dereplication_report.tsv"),
     input:
         fasta=rules.combine_all_viruses.output,
         clusters=rules.ani_for_dereplication.output.clustering_results,
         representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
-        ani=rules.ani_for_dereplication.output.ani_results
-    log: os.path.join(RESULTS_DIR, "logs", "dereplication_report.log")
+        ani=rules.ani_for_dereplication.output.ani_results,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "dereplication_report.log"),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """python ./scripts/dereplication_report.py --fasta {input.fasta:q} --clusters {input.clusters:q} --representatives {input.representatives:q} --ani {input.ani:q} --output {output:q} > {log:q} 2>&1"""
+
 
 # Resolve data-dependent sample/representative pairs after clustering.
 checkpoint prepare_post_dereplication_mapping:
     output:
-        prepared=directory(os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs"))
+        prepared=directory(
+            os.path.join(
+                RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs"
+            )
+        ),
     input:
         representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
         clusters=rules.ani_for_dereplication.output.clustering_results,
-        sample_fastas=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"))
+        sample_fastas=active_sample_files(
+            os.path.join(
+                RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"
+            )
+        ),
     params:
-        script=workflow.basedir + "/scripts/dereplication_mapping.py",
-        sample_args=lambda wildcards, input: [value for sample, fasta in zip(active_viral_samples(wildcards), input.sample_fastas)                                     for value in ("--sample-fasta", sample, str(fasta))]
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "prepare_post_dereplication_mapping.log")
+        script=workflow.source_path("../scripts/dereplication_mapping.py"),
+        sample_args=lambda wildcards, input: [
+            value
+            for sample, fasta in zip(
+                active_viral_samples(wildcards), input.sample_fastas
+            )
+            for value in ("--sample-fasta", sample, str(fasta))
+        ],
+    conda:
+        os.path.join(ENV_DIR, "pharokka.yaml")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "prepare_post_dereplication_mapping.log"),
     shell:
         """python {params.script:q} --representatives-fasta {input.representatives:q} --clusters {input.clusters:q} {params.sample_args:q} --output-dir {output.prepared:q} > {log:q} 2>&1"""
 
-def post_dereplication_pairs(wildcards):
-    import csv
-    prepared = checkpoints.prepare_post_dereplication_mapping.get().output.prepared
-    with open(os.path.join(prepared, "sample_representatives.tsv"), newline="") as handle:
-        return [(row["sample"], row["representative"]) for row in csv.DictReader(handle, delimiter="\t")]
-
-def post_dereplication_bams(wildcards):
-    return [os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", f"{sample}_on_{representative}.bam")
-            for sample, representative in post_dereplication_pairs(wildcards)]
 
 # lovis4u of dereplicated phages
 rule lovis4u_pharokka_post_dereplication:
-    output: os.path.join(RESULTS_DIR, "combined_viruses", "lovis4u_pharokka_post_dereplication", "lovis4u.pdf")
+    output:
+        os.path.join(
+            RESULTS_DIR,
+            "combined_viruses",
+            "lovis4u_pharokka_post_dereplication",
+            "lovis4u.pdf",
+        ),
     input:
-        linux = rules.install_lovis4u_linux.output,
-        gff = active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff")),
-        representatives = rules.viruses_dereplicated.output.fna_viruses_derep,
-        splitter = "scripts/prepare_lovis4u_gff.py"
-    conda: os.path.join(ENV_DIR, "lovis4u.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "lovis4u_pharokka_post_dereplication.log")
+        linux=rules.install_lovis4u_linux.output,
+        gff=active_sample_files(
+            os.path.join(RESULTS_DIR, "{sample}", "pharokka", "pharokka.gff")
+        ),
+        representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
+        splitter="scripts/prepare_lovis4u_gff.py",
+    conda:
+        os.path.join(ENV_DIR, "lovis4u.yaml")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "lovis4u_pharokka_post_dereplication.log"),
     shell:
         """(date &&
         python {input.splitter:q} --output-dir $(dirname {output:q})/gff_input --representatives-fasta {input.representatives:q} {input.gff:q} &&
         lovis4u -gff $(dirname {output:q})/gff_input --reorient_loci --use-filename-as-id --add-locus-id-prefix --homology-links --run-hmmscan --clust_loci-off --debug -o $(dirname {output:q}) &&
         date) &> {log:q}"""
 
+
 # thebigbam post dereplication
 rule thebigbam_mapping_post_dereplication:
     output:
-        bam=os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication", "{sample}_on_{representative}.bam")
+        bam=os.path.join(
+            RESULTS_DIR,
+            "minimap2",
+            "thebigbam_post_dereplication",
+            "{sample}_on_{representative}.bam",
+        ),
     input:
         # Keep the mapper's reference concrete on cluster workers: a checkpoint
         # input function can expand to its directory while marked incomplete.
-        assembly=os.path.join(RESULTS_DIR, "combined_viruses", "dereplication", "mapping_inputs", "references", "{representative}.fna"),
+        assembly=os.path.join(
+            RESULTS_DIR,
+            "combined_viruses",
+            "dereplication",
+            "mapping_inputs",
+            "references",
+            "{representative}.fna",
+        ),
         prepared=rules.prepare_post_dereplication_mapping.output.prepared,
-        read1=sample_reads
+        read1=sample_reads,
     wildcard_constraints:
-        sample="|".join(__import__("re").escape(sample) for sample in PHAGES_LIST) or "(?!)",
-        representative="[^/]+"
-    params: mapper=sample_mapper
-    conda: os.path.join(ENV_DIR, "thebigbam.yaml")
+        sample="|".join(__import__("re").escape(sample) for sample in PHAGES_LIST)
+        or "(?!)",
+        representative="[^/]+",
+    params:
+        mapper=sample_mapper,
+    conda:
+        os.path.join(ENV_DIR, "thebigbam.yaml")
     threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_on_{representative}_mapping_post_dereplication.log")
-    message: "Mapping {wildcards.sample} reads to representative {wildcards.representative}"
+    log:
+        os.path.join(
+            RESULTS_DIR,
+            "logs",
+            "{sample}_on_{representative}_mapping_post_dereplication.log",
+        ),
+    message:
+        "Mapping {wildcards.sample} reads to representative {wildcards.representative}"
     shell:
         """(date &&
         thebigbam mapping-per-sample -t {threads} -r1 {input.read1:q} -a {input.assembly:q} --mapper {params.mapper:q} --circular --keep-unmapped -o {output.bam:q} &&
         date) &> {log:q}"""
 
+
 rule thebigbam_annotations_post_dereplication:
-    output: os.path.join(RESULTS_DIR, "thebigbam", "viral_annotations_enriched_post_dereplication.gff")
+    output:
+        os.path.join(
+            RESULTS_DIR,
+            "thebigbam",
+            "viral_annotations_enriched_post_dereplication.gff",
+        ),
     input:
-        annotations=active_sample_files(os.path.join(RESULTS_DIR, "{sample}", "annotations_on_viruses_enriched", "viral_annotations_enriched.gff")),
-        representatives=rules.viruses_dereplicated.output.fna_viruses_derep
+        annotations=active_sample_files(
+            os.path.join(
+                RESULTS_DIR,
+                "{sample}",
+                "annotations_on_viruses_enriched",
+                "viral_annotations_enriched.gff",
+            )
+        ),
+        representatives=rules.viruses_dereplicated.output.fna_viruses_derep,
     params:
-        script=workflow.basedir + "/scripts/filter_dereplicated_annotations.py"
-    conda: os.path.join(ENV_DIR, "pharokka.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "thebigbam_annotations_post_dereplication.log")
-    message: "Combining enriched annotations for dereplicated representatives only"
+        script=workflow.source_path("../scripts/filter_dereplicated_annotations.py"),
+    conda:
+        os.path.join(ENV_DIR, "pharokka.yaml")
+    log:
+        os.path.join(
+            RESULTS_DIR, "logs", "thebigbam_annotations_post_dereplication.log"
+        ),
+    message:
+        "Combining enriched annotations for dereplicated representatives only"
     shell:
         """(date &&
         python {params.script:q} --annotations {input.annotations:q} \
             --representatives-fasta {input.representatives:q} --output {output:q} &&
         date) &> {log:q}"""
 
+
 rule thebigbam_calculate_post_dereplication:
-    output: os.path.join(RESULTS_DIR, "thebigbam", "thebigbam_ALP_post_dereplication.db")
+    output:
+        os.path.join(RESULTS_DIR, "thebigbam", "thebigbam_ALP_post_dereplication.db"),
     input:
-        annotation = rules.thebigbam_annotations_post_dereplication.output,
-        bam = post_dereplication_bams
+        annotation=rules.thebigbam_annotations_post_dereplication.output,
+        bam=post_dereplication_bams,
     params:
-        bam_dir = os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication"),
-    conda: os.path.join(ENV_DIR, "thebigbam.yaml")
+        bam_dir=os.path.join(RESULTS_DIR, "minimap2", "thebigbam_post_dereplication"),
+    conda:
+        os.path.join(ENV_DIR, "thebigbam.yaml")
     threads: 8
-    log: os.path.join(RESULTS_DIR, "logs", "thebigbam_calculate_post_dereplication.log")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "thebigbam_calculate_post_dereplication.log"),
     shell:
         """(date &&
         thebigbam calculate -t {threads} -b {params.bam_dir:q} \

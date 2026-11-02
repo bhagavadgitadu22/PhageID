@@ -1,9 +1,15 @@
 # Install into an explicit venv retained alongside the pinned source release.
 rule phageterm_preparation:
-    output: installation=directory(os.path.join(RESULTS_DIR, "software", "PhageTerm", "phagetermvirome-4.3"))
-    log: os.path.join(RESULTS_DIR, "logs", "phageterm_preparation.log")
-    conda: os.path.join(ENV_DIR, "phageterm.yaml")
-    message: "Preparing PhageTermVirome"
+    output:
+        installation=directory(
+            os.path.join(RESULTS_DIR, "software", "PhageTerm", "phagetermvirome-4.3")
+        ),
+    log:
+        os.path.join(RESULTS_DIR, "logs", "phageterm_preparation.log"),
+    conda:
+        os.path.join(ENV_DIR, "phageterm.yaml")
+    message:
+        "Preparing PhageTermVirome"
     shell:
         """(date &&
         mkdir -p {output.installation:q} &&
@@ -20,14 +26,20 @@ rule phageterm_preparation:
         "$VIRTUAL_ENV/bin/phageterm" --help &&
         date) &> {log:q}"""
 
+
 rule phageterm:
-    output: os.path.join(RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf")
+    output:
+        os.path.join(
+            RESULTS_DIR, "{sample}", "phageterm", "Analysis_PhageTerm_report.pdf"
+        ),
     input:
         reads=sample_reads,
         virus=rules.finalize_viral_assembly.output.corrected,
-        installation=rules.phageterm_preparation.output.installation
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log")
-    conda: os.path.join(ENV_DIR, "phageterm.yaml")
+        installation=rules.phageterm_preparation.output.installation,
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_phageterm.log"),
+    conda:
+        os.path.join(ENV_DIR, "phageterm.yaml")
     threads: 8
     shell:
         """(date &&

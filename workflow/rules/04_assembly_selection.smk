@@ -3,16 +3,40 @@
 # assembler can be flye|spades|autocycler
 rule genomad_candidate:
     output:
-        fasta=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna"),
-        summary=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus_summary.tsv")
-    input: 
-        assembly = candidate_assembly,
-        db = os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv")
-    wildcard_constraints: assembler="flye|spades|autocycler"
-    conda: os.path.join(ENV_DIR, "genomad.yaml")
+        fasta=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "assembly_virus.fna",
+        ),
+        summary=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "assembly_virus_summary.tsv",
+        ),
+    input:
+        assembly=candidate_assembly,
+        db=os.path.join(config["genomad_db"], "genomad_marker_metadata.tsv"),
+    wildcard_constraints:
+        assembler="flye|spades|autocycler",
+    conda:
+        os.path.join(ENV_DIR, "genomad.yaml")
     threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_genomad.log")
-    message: "Running geNomad"
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_genomad.log"),
+    message:
+        "Running geNomad"
     shell:
         """
         (
@@ -27,41 +51,113 @@ rule genomad_candidate:
         ) > {log:q} 2>&1
         """
 
+
 # keeping viral contigs longer than 2 kbp
 rule keep_long_viral_contigs_candidate:
-    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "genomad", "geNomad_assembly", "assembly_summary", "viral_above_2_kbp.fna")
-    input: rules.genomad_candidate.output.fasta
-    wildcard_constraints: assembler="flye|spades|autocycler"
-    conda: os.path.join(ENV_DIR, "preprocessing.yaml")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_keep_long_viral_contigs.log")
+    output:
+        os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "viral_above_2_kbp.fna",
+        ),
+    input:
+        rules.genomad_candidate.output.fasta,
+    wildcard_constraints:
+        assembler="flye|spades|autocycler",
+    conda:
+        os.path.join(ENV_DIR, "preprocessing.yaml")
+    log:
+        os.path.join(
+            RESULTS_DIR,
+            "logs",
+            "{sample}_{readset}_{assembler}_keep_long_viral_contigs.log",
+        ),
     shell:
         """(date && seqtk seq -L 2000 {input} > {output} && date) &> {log}"""
 
+
 # renaming contigs with sample name to avoid duplicates in downstream analyses
 rule rename_contigs_candidate:
-    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "genomad", "geNomad_assembly", "assembly_summary", "viral_above_2_kbp_renamed.fna")
-    input: rules.keep_long_viral_contigs_candidate.output
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_rename_contigs.log")
+    output:
+        os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "viral_above_2_kbp_renamed.fna",
+        ),
+    input:
+        rules.keep_long_viral_contigs_candidate.output,
+    log:
+        os.path.join(
+            RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_rename_contigs.log"
+        ),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
-        """(date && awk -v sample={wildcards.sample} '/^>/ {{print ">" sample "_" substr($0, 2); next}} {{print}}' {input} > {output} && date) &> {log}"""
+        """(date && awk -v sample={wildcards.sample:q} 'substr($0, 1, 1) == ">" {{print ">" sample "_" substr($0, 2); next}} {{print}}' {input:q} > {output:q} && date) &> {log:q}"""
+
 
 # autoblast to detect potential duplications of the phage (concatemers)
 rule fix_circular_viral_contigs_per_sample_candidate:
     output:
-        corrected=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "circularisation", "circular_viruses.fasta"),
-        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "circularisation", "breaking_concatemers_report.csv"),
-        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "circularisation", "breaking_dtr_report.csv")
-    input: rules.rename_contigs_candidate.output
+        corrected=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "circularisation",
+            "circular_viruses.fasta",
+        ),
+        concatemer_report=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "circularisation",
+            "breaking_concatemers_report.csv",
+        ),
+        dtr_report=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "circularisation",
+            "breaking_dtr_report.csv",
+        ),
+    input:
+        rules.rename_contigs_candidate.output,
     params:
         min_identity=95,
         min_repeat=90,
         min_coverage=90,
-        max_distance=20
-    wildcard_constraints: assembler="flye|spades|autocycler"
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
+        max_distance=20,
+    wildcard_constraints:
+        assembler="flye|spades|autocycler",
+    conda:
+        os.path.join(ENV_DIR, "checkv.yaml")
     threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "fix_circular_viral_contigs_{sample}_{readset}_{assembler}.log")
-    message: "Correcting likely viral concatemers and terminal repeats in {wildcards.sample}"
+    log:
+        os.path.join(
+            RESULTS_DIR,
+            "logs",
+            "fix_circular_viral_contigs_{sample}_{readset}_{assembler}.log",
+        ),
+    message:
+        "Correcting likely viral concatemers and terminal repeats in {wildcards.sample}"
     shell:
         """
         (date &&
@@ -71,18 +167,31 @@ rule fix_circular_viral_contigs_per_sample_candidate:
         date) &> {log}
         """
 
+
 # CheckV to assess completeness
 rule checkv_candidate:
-    output: 
-        checkv_quality = os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "checkv", "quality_summary.tsv"),
-    input: 
-        db = config["checkv_db"],
-        assembly = rules.fix_circular_viral_contigs_per_sample_candidate.output.corrected
-    wildcard_constraints: assembler="flye|spades|autocycler"
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
+    output:
+        checkv_quality=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "checkv",
+            "quality_summary.tsv",
+        ),
+    input:
+        db=config["checkv_db"],
+        assembly=rules.fix_circular_viral_contigs_per_sample_candidate.output.corrected,
+    wildcard_constraints:
+        assembler="flye|spades|autocycler",
+    conda:
+        os.path.join(ENV_DIR, "checkv.yaml")
     threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_checkv.log")
-    message: "Running the first CheckV per assembly"
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_{readset}_{assembler}_checkv.log"),
+    message:
+        "Running the first CheckV per assembly"
     shell:
         """
         (
@@ -102,45 +211,134 @@ rule checkv_candidate:
         ) > {log:q} 2>&1
         """
 
+
 # Each quality checkpoint lets selection inspect a completed candidate.
 checkpoint candidate_viral_quality:
     input:
         quality=rules.checkv_candidate.output.checkv_quality,
-        status=lambda wc: os.path.join(os.path.dirname(candidate_assembly(wc)), "assembly_status.txt")
+        status=lambda wc: os.path.join(
+            os.path.dirname(candidate_assembly(wc)), "assembly_status.txt"
+        ),
     output:
-        quality=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "validated_quality.tsv"),
-        status=os.path.join(RESULTS_DIR, "{sample}", "assembly_attempts", "{readset}", "{assembler}", "validated_assembly_status.txt")
-    wildcard_constraints: assembler="flye|spades|autocycler"
-    shell: "cp {input.quality:q} {output.quality:q}; cp {input.status:q} {output.status:q}"
+        quality=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "validated_quality.tsv",
+        ),
+        status=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_attempts",
+            "{readset}",
+            "{assembler}",
+            "validated_assembly_status.txt",
+        ),
+    wildcard_constraints:
+        assembler="flye|spades|autocycler",
+    log:
+        os.path.join(
+            RESULTS_DIR,
+            "logs",
+            "{sample}_{readset}_{assembler}_candidate_viral_quality.log",
+        ),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
+    shell:
+        "(cp {input.quality:q} {output.quality:q} && cp {input.status:q} {output.status:q}) > {log:q} 2>&1"
+
 
 # Resolve the choice once and persist validated source paths before publication.
 rule assembly_selection_manifest:
-    input: sources=selection_manifest_inputs
-    output: os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "selected_sources.json")
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_selection_manifest.log")
+    input:
+        sources=selection_manifest_inputs,
+    output:
+        os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "selected_sources.json"
+        ),
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_assembly_selection_manifest.log"),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """python ./scripts/assembly_selection_manifest.py create --sample {wildcards.sample:q} --inputs {input.sources:q} --output {output:q} > {log:q} 2>&1"""
 
+
 # Static dependency: forcing publication cannot substitute checkpoint placeholders.
 rule select_viral_assembly:
-    input: manifest=rules.assembly_selection_manifest.output
+    input:
+        manifest=rules.assembly_selection_manifest.output,
     output:
-        corrected=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_circular_viruses.fasta"),
-        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_breaking_concatemers_report.csv"),
-        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_breaking_dtr_report.csv"),
-        checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "automatic_quality_summary.tsv"),
-        fasta=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus.fna"),
-        summary=os.path.join(RESULTS_DIR, "{sample}", "genomad", "geNomad_assembly", "assembly_summary", "assembly_virus_summary.tsv"),
-        assembly=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly.fasta"),
-        flye_info=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "flye_info.tsv"),
-        assembler=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembler.txt"),
-        status=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "assembly_status.txt"),
-        read_stats=os.path.join(RESULTS_DIR, "{sample}", "assembly_selection", "read_stats.tsv")
+        corrected=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_selection",
+            "automatic_circular_viruses.fasta",
+        ),
+        concatemer_report=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_selection",
+            "automatic_breaking_concatemers_report.csv",
+        ),
+        dtr_report=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_selection",
+            "automatic_breaking_dtr_report.csv",
+        ),
+        checkv_quality=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "assembly_selection",
+            "automatic_quality_summary.tsv",
+        ),
+        fasta=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "assembly_virus.fna",
+        ),
+        summary=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "genomad",
+            "geNomad_assembly",
+            "assembly_summary",
+            "assembly_virus_summary.tsv",
+        ),
+        assembly=os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "assembly.fasta"
+        ),
+        flye_info=os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "flye_info.tsv"
+        ),
+        assembler=os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "assembler.txt"
+        ),
+        status=os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "assembly_status.txt"
+        ),
+        read_stats=os.path.join(
+            RESULTS_DIR, "{sample}", "assembly_selection", "read_stats.tsv"
+        ),
     params:
-        destinations=lambda wc, output: [value for name, path in output.items() for value in ("--destination", name, str(path))]
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_select_viral_assembly.log")
+        destinations=lambda wc, output: [
+            value
+            for name, path in output.items()
+            for value in ("--destination", name, str(path))
+        ],
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_select_viral_assembly.log"),
+    conda:
+        os.path.join(ENV_DIR, "utility.yaml")
     shell:
         """python ./scripts/assembly_selection_manifest.py publish --sample {wildcards.sample:q} --manifest {input.manifest:q} {params.destinations:q} > {log:q} 2>&1"""
+
 
 # Publish an optional, manually edited FASTA without changing the selected candidate.
 rule finalize_viral_assembly:
@@ -150,20 +348,42 @@ rule finalize_viral_assembly:
         dtr=rules.select_viral_assembly.output.dtr_report,
         quality=rules.select_viral_assembly.output.checkv_quality,
         manual=manual_viral_fasta,
-        db=config["checkv_db"]
+        db=config["checkv_db"],
     output:
-        corrected=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"),
-        concatemer_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_concatemers_report.csv"),
-        dtr_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "breaking_dtr_report.csv"),
-        manual_report=os.path.join(RESULTS_DIR, "{sample}", "circularisation", "manual_corrections_report.tsv"),
-        checkv_quality=os.path.join(RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv")
+        corrected=os.path.join(
+            RESULTS_DIR, "{sample}", "circularisation", "circular_viruses.fasta"
+        ),
+        concatemer_report=os.path.join(
+            RESULTS_DIR,
+            "{sample}",
+            "circularisation",
+            "breaking_concatemers_report.csv",
+        ),
+        dtr_report=os.path.join(
+            RESULTS_DIR, "{sample}", "circularisation", "breaking_dtr_report.csv"
+        ),
+        manual_report=os.path.join(
+            RESULTS_DIR, "{sample}", "circularisation", "manual_corrections_report.tsv"
+        ),
+        checkv_quality=os.path.join(
+            RESULTS_DIR, "{sample}", "checkv", "quality_summary.tsv"
+        ),
     params:
-        script=workflow.basedir + "",
-        manual_args=lambda wc, input: (["--manual", str(input.manual[0] if isinstance(input.manual, list) else input.manual)]
-                                       if input.manual else [])
-    conda: os.path.join(ENV_DIR, "checkv.yaml")
+        manual_args=lambda wc, input: (
+            [
+                "--manual",
+                str(
+                    input.manual[0] if isinstance(input.manual, list) else input.manual
+                ),
+            ]
+            if input.manual
+            else []
+        ),
+    conda:
+        os.path.join(ENV_DIR, "checkv.yaml")
     threads: 4
-    log: os.path.join(RESULTS_DIR, "logs", "{sample}_finalize_viral_assembly.log")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "{sample}_finalize_viral_assembly.log"),
     shell:
         """(
             python ./scripts/finalize_viral_assembly.py --automatic {input.automatic:q} --concatemer {input.concatemer:q} --dtr {input.dtr:q} {params.manual_args:q} --output {output.corrected:q} --concatemer-output {output.concatemer_report:q} --dtr-output {output.dtr_report:q} --report {output.manual_report:q} &&
