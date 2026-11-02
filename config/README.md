@@ -23,4 +23,4 @@ snakemake --use-conda --cores 8 pipeline_all_phages
 
 `corrected_assembly_all_phages` runs assembly and reports only;
 `pipeline_comparison_phages` adds the cross-sample comparison. The same commands
-also work from `workflow/`, as shown in the main README.
+also work from `workflow/`, as shown in the main [README](https://github.com/bhagavadgitadu22/PhageID).
