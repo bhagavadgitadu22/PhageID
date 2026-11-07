@@ -15,27 +15,52 @@ conda activate phageid
 
 Snakemake installs tools for individual rules when run with --use-conda. The first run requires internet access to download environments, software, and models. Configure the input paths below, then run Snakemake from workflow/.
 
-## Inputs
+## Quickstart
 
-`data/samples.tsv` is tab-separated **without a header**, with columns in this order:
+Edit `config/config.yaml` before running PhageID. The paths in the committed file describe the original study environment and need to be replaced for another system.
 
-| Sample | Long reads | TruSeq single-end reads | Bacterial host genome |
-| --- | --- | --- | --- |
-| isolate_long | /path/to/long_reads/ | NA | /path/to/host.fasta |
-| isolate_short | NA | /path/to/single_end.fastq.gz | NA |
+| Setting                                                                                               | What to provide                                                                                                            |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `samples_file`                                                                                        | Path to a tab-separated sample sheet, such as `../data/samples.example.tsv`. Relative paths are resolved from `workflow/`. |
+| `sample_data_root`                                                                                    | Base directory for relative read and host-reference paths in the sample sheet.                                             |
+| `results_dir`                                                                                         | Directory for output files. An absolute path is recommended.                                                               |
+| `genomad_db`, `checkv_db`, `pharokka_db`, `phold_db`, `plassembler_db`, `checkamg_db`, `vcontact3_db` | Installed reference database directories used by the selected workflow stages.                                             |
 
-Each read input can be a file or a directory. At least one read input is required. Paths in the sample sheet may be absolute or relative to `sample_data_root` in `config/config.yaml`. If a bacterial host genome is provided, it will be used to remove bacterial contamination from the sequencing reads.
+The sample sheet has no header and contains four tab-separated columns: 
 
-`data/samples.example.tsv` shows the required layout. Replace its example paths with your own files under `sample_data_root`, then set `samples_file` to the example sheet or your own sheet. The included `data/samples.tsv` records the 67 study samples using paths relative to the original ALP collection. Study reads and host reference FASTAs are available under [NCBI BioProject PRJNA1423127](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1423127); download and arrange them to match the sample sheet before reproducing the study run. These files are not included in this repository.
+- sample ID
 
-Set `samples_file`, `sample_data_root`, `results_dir`, and the reference database paths in `config/config.yaml`. The included study sample sheet uses paths relative to `sample_data_root`. Run from `workflow/` using the Snakemake environment defined in `envs/requirements.yaml`:
+- long-read FASTQ file or directory
+
+- short-read FASTQ file or directory
+
+- host reference FASTA.
+
+Use `NA` for an absent input. Each sample must have at least one read input. The host genome is optional but can be provided to remove bacterial contamination from the sequencing reads.
+
+`data/samples.example.tsv` shows the layout. The study sample sheet in `data/samples.tsv` refers to the 67 study samples using paths relative to the original ALP collection. Study reads and host reference FASTAs are available under [NCBI BioProject PRJNA1423127](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1423127). You can download and arrange them to match the sample sheet if you want to reproduce the study run.
+
+After configuring paths, activate the environment from `envs/requirements.yaml` and run from the repository root:
 
 ```bash
-cd workflow
-snakemake --use-conda --cores 8 corrected_assembly_all_phages  # assembly and reports
-snakemake --use-conda --cores 8 pipeline_all_phages            # add sample annotation (default target)
-snakemake --use-conda --cores 8 pipeline_comparison_phages     # add cross-sample comparisons
+snakemake --use-conda --cores 8 pipeline_all_phages
 ```
+
+`corrected_assembly_all_phages` runs assembly and reports only; `pipeline_comparison_phages` adds the cross-sample comparison.
+
+If using slurm, run instead:
+
+```bash
+SMK_CLUSTER="sbatch --parsable -q {cluster.qos} -N {cluster.nodes} -n {cluster.n} -c {threads} -t {cluster.time}"
+snakemake --use-conda --jobs 200 --local-cores 1 \
+  --cluster-config ../config/slurm.yaml \
+  --cluster "$SMK_CLUSTER" \
+  --cluster-status "python scripts/slurm_cluster_status.py" \
+  --keep-going --rerun-incomplete \
+  pipeline_all_phages
+```
+
+The cluster-status option enables the detection of failed Slurm jobs, including OOM and timeout failures that could otherwise be mistaken for ordinary assembler failures.
 
 ## Assembly
 
@@ -62,6 +87,7 @@ The workflow builds a theBIGbam database containing all selected viral contigs a
 ## Main reports
 
 Several reports can be found in the reports/ directory:
+
 - `assembly_report_per_sample.tsv`: one row per sample describing assembly method used and number of viral contigs obtained.
 - `assembly_report_per_viral_contig.tsv`: one row per selected viral contig describing sample of origin, assembly method used, original and corrected lengths, coverage depth and percentage of reads mapping, Flye circularity, CheckV metrics and geNomad taxonomy/provirus status.
 - `annotation_report_per_viral_contig.tsv`: one row per selected viral contig, with Pharokka function counts and `Coding_density_percent` (the percentage of corrected contig bases covered by at least one Pharokka CDS). 
@@ -111,71 +137,72 @@ After resequencing and reassembly, a viral contig of a similar length is obtaine
 
 ### Software and algorithms
 
-| REAGENT or RESOURCE | SOURCE | IDENTIFIER |
-| --- | --- | --- |
-| Snakemake | [Snakemake](https://snakemake.github.io/) | v7.32.4 |
-| Mamba | [mamba-org](https://mamba.readthedocs.io/) | v1.5.6 |
-| Python | [Python Software Foundation](https://www.python.org/) | v3.10.13 (workflow); v3.8.10 (Genotate); v3.9 (PhageTerm); v3.11.5 (Empathi and Sublyme); v3.11 (CheckAMG) |
-| Porechop | [Wick; Porechop](https://github.com/rrwick/Porechop) | v0.2.4 |
-| fastp | [fastp](https://github.com/OpenGene/fastp) | v0.23.4; single-end TruSeq preprocessing |
-| Seqtk | [Li; seqtk](https://github.com/lh3/seqtk) | v1.5 |
-| Autocycler | [Autocycler](https://github.com/rrwick/Autocycler) | v0.7.0; automatic long-read fallback |
-| miniasm and Minipolish | [miniasm](https://github.com/lh3/miniasm); [Minipolish](https://github.com/rrwick/Minipolish) | miniasm v0.3; Minipolish v0.2.1 |
-| Racon | [Racon](https://github.com/lbcb-sci/racon) | v1.5.0 |
-| Canu | [Canu](https://github.com/marbl/canu) | v2.3 |
-| metaMDBG | [metaMDBG](https://github.com/GaetanBenoitDev/metaMDBG) | v1.4 |
-| NECAT | [NECAT](https://github.com/xiaochuanle/NECAT) | v0.0.1_update20200803 |
-| NextDenovo | [NextDenovo](https://github.com/Nextomics/NextDenovo) | v2.5.2 |
-| NextPolish | [NextPolish](https://github.com/Nextomics/NextPolish) | v1.4.1; polishing for the NextDenovo candidate |
-| Plassembler | [Plassembler](https://github.com/gbouras13/plassembler) | v1.8.5 |
-| Raven | [Raven](https://github.com/lbcb-sci/raven) | v1.8.3 (Autocycler candidate assemblies) |
-| Flye | [Flye](https://github.com/mikolmogorov/Flye) | v2.9.6 |
-| SPAdes | [SPAdes](https://github.com/ablab/spades) | v4.3.0 |
-| geNomad | [Camargo et al.; geNomad](https://github.com/apcamargo/genomad) | v1.12.0 |
-| CheckV | [CheckV](https://pypi.org/project/checkv/) | v1.1.1 |
-| PhageTermVirome | [PhageTermVirome](https://pypi.org/project/phagetermvirome/4.3/) | v4.3 |
-| Pharokka | [Bouras et al.; Pharokka](https://github.com/gbouras13/pharokka) | v1.10.1 |
-| Phold | [Bouras et al.; Phold](https://github.com/gbouras13/phold) | v1.3.0 |
-| Genotate | [Genotate](https://github.com/deprekate/genotate) | v0.15 |
-| Empathi | [Boulay; Empathi](https://huggingface.co/AlexandreBoulay/empathi) | Git revision `7e9cccc00b29e11db1c0bfa066167e8026ef981c` |
-| Sublyme | [Rousseau Team; Sublyme](https://github.com/Rousseau-Team/sublyme) | v1.2.2 |
-| DefenseFinder | [DefenseFinder](https://github.com/mdmparis/defense-finder) | v3.0.0 (`mdmparis-defense-finder`) |
-| MacSyFinder | [MacSyFinder](https://macsyfinder.readthedocs.io/) | v2.1.4 |
-| HMMER | [HMMER](http://hmmer.org/) | v3.4 (DefenseFinder environment) |
-| CheckAMG | [Anantharaman Lab; CheckAMG](https://github.com/AnantharamanLab/CheckAMG) | Git revision `d29aaef` |
-| LoVis4u | [Egorov et al.; LoVis4u](https://github.com/art-egorov/lovis4u) | v0.1.5 |
-| pyhmmer | [pyhmmer](https://github.com/althonos/pyhmmer) | v0.11.4 (LoVis4u environment) |
-| vConTACT3 | [vConTACT3](https://vcontact3.readthedocs.io/) | v3.1.6 |
-| theBIGbam | [theBIGbam](https://github.com/bhagavadgitadu22/theBIGbam) | v0.8.0 |
-| Minimap2 | [Li; minimap2](https://github.com/lh3/minimap2) | v2.31 (Autocycler); otherwise unpinned; used for read mapping |
-| SAMtools | [SAMtools](https://www.htslib.org/) | Unpinned; used for alignment processing |
-| BLAST+ (BLASTn) | [NCBI BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi) | Unpinned; used for self-alignment and genome comparisons |
-| Biopython | [Biopython](https://biopython.org/) | v1.80 (Pharokka environment) |
-| TensorFlow | [TensorFlow](https://www.tensorflow.org/) | v2.13.1 (Genotate) |
-| PyTorch | [PyTorch](https://pytorch.org/) | Version unpinned in the Phold environment; v2.7.1, CUDA 12.8 wheels (Empathi); v2.8.0, CPU wheels (CheckAMG) |
-| NumPy | [NumPy](https://numpy.org/) | <2.0 in the PhageTerm environment; exact version unpinned |
-| Matplotlib | [Matplotlib](https://matplotlib.org/) | Unpinned; used by custom plotting scripts |
-| pyCirclize | [pyCirclize](https://github.com/moshi4/pyCirclize) | Unpinned; used for Genotate contig plots |
-| R and ggplot2 | [R](https://www.r-project.org/); [ggplot2](https://ggplot2.tidyverse.org/) | Unpinned in the viral-read histogram environment |
-| GNU Scientific Library | [GNU GSL](https://www.gnu.org/software/gsl/) | v2.7.0 (Pharokka environment) |
-| Poetry | [Poetry](https://python-poetry.org/) | v1.8.5 (PhageTerm installation) |
+| REAGENT or RESOURCE    | SOURCE                                                                                        | IDENTIFIER                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Snakemake              | [Snakemake](https://snakemake.github.io/)                                                     | v7.32.4                                                                                                      |
+| Mamba                  | [mamba-org](https://mamba.readthedocs.io/)                                                    | v1.5.6                                                                                                       |
+| Python                 | [Python Software Foundation](https://www.python.org/)                                         | v3.10.13 (workflow); v3.8.10 (Genotate); v3.9 (PhageTerm); v3.11.5 (Empathi and Sublyme); v3.11 (CheckAMG)   |
+| Porechop               | [Wick; Porechop](https://github.com/rrwick/Porechop)                                          | v0.2.4                                                                                                       |
+| fastp                  | [fastp](https://github.com/OpenGene/fastp)                                                    | v0.23.4; single-end TruSeq preprocessing                                                                     |
+| Seqtk                  | [Li; seqtk](https://github.com/lh3/seqtk)                                                     | v1.5                                                                                                         |
+| Autocycler             | [Autocycler](https://github.com/rrwick/Autocycler)                                            | v0.7.0; automatic long-read fallback                                                                         |
+| miniasm and Minipolish | [miniasm](https://github.com/lh3/miniasm); [Minipolish](https://github.com/rrwick/Minipolish) | miniasm v0.3; Minipolish v0.2.1                                                                              |
+| Racon                  | [Racon](https://github.com/lbcb-sci/racon)                                                    | v1.5.0                                                                                                       |
+| Canu                   | [Canu](https://github.com/marbl/canu)                                                         | v2.3                                                                                                         |
+| metaMDBG               | [metaMDBG](https://github.com/GaetanBenoitDev/metaMDBG)                                       | v1.4                                                                                                         |
+| NECAT                  | [NECAT](https://github.com/xiaochuanle/NECAT)                                                 | v0.0.1_update20200803                                                                                        |
+| NextDenovo             | [NextDenovo](https://github.com/Nextomics/NextDenovo)                                         | v2.5.2                                                                                                       |
+| NextPolish             | [NextPolish](https://github.com/Nextomics/NextPolish)                                         | v1.4.1; polishing for the NextDenovo candidate                                                               |
+| Plassembler            | [Plassembler](https://github.com/gbouras13/plassembler)                                       | v1.8.5                                                                                                       |
+| Raven                  | [Raven](https://github.com/lbcb-sci/raven)                                                    | v1.8.3 (Autocycler candidate assemblies)                                                                     |
+| Flye                   | [Flye](https://github.com/mikolmogorov/Flye)                                                  | v2.9.6                                                                                                       |
+| SPAdes                 | [SPAdes](https://github.com/ablab/spades)                                                     | v4.3.0                                                                                                       |
+| geNomad                | [Camargo et al.; geNomad](https://github.com/apcamargo/genomad)                               | v1.12.0                                                                                                      |
+| CheckV                 | [CheckV](https://pypi.org/project/checkv/)                                                    | v1.1.1                                                                                                       |
+| PhageTermVirome        | [PhageTermVirome](https://pypi.org/project/phagetermvirome/4.3/)                              | v4.3                                                                                                         |
+| Pharokka               | [Bouras et al.; Pharokka](https://github.com/gbouras13/pharokka)                              | v1.10.1                                                                                                      |
+| Phold                  | [Bouras et al.; Phold](https://github.com/gbouras13/phold)                                    | v1.3.0                                                                                                       |
+| Genotate               | [Genotate](https://github.com/deprekate/genotate)                                             | v0.15                                                                                                        |
+| Empathi                | [Boulay; Empathi](https://huggingface.co/AlexandreBoulay/empathi)                             | Git revision `7e9cccc00b29e11db1c0bfa066167e8026ef981c`                                                      |
+| Sublyme                | [Rousseau Team; Sublyme](https://github.com/Rousseau-Team/sublyme)                            | v1.2.2                                                                                                       |
+| DefenseFinder          | [DefenseFinder](https://github.com/mdmparis/defense-finder)                                   | v3.0.0 (`mdmparis-defense-finder`)                                                                           |
+| MacSyFinder            | [MacSyFinder](https://macsyfinder.readthedocs.io/)                                            | v2.1.4                                                                                                       |
+| HMMER                  | [HMMER](http://hmmer.org/)                                                                    | v3.4 (DefenseFinder environment)                                                                             |
+| CheckAMG               | [Anantharaman Lab; CheckAMG](https://github.com/AnantharamanLab/CheckAMG)                     | Git revision `d29aaef`                                                                                       |
+| LoVis4u                | [Egorov et al.; LoVis4u](https://github.com/art-egorov/lovis4u)                               | v0.1.5                                                                                                       |
+| pyhmmer                | [pyhmmer](https://github.com/althonos/pyhmmer)                                                | v0.11.4 (LoVis4u environment)                                                                                |
+| vConTACT3              | [vConTACT3](https://vcontact3.readthedocs.io/)                                                | v3.1.6                                                                                                       |
+| theBIGbam              | [theBIGbam](https://github.com/bhagavadgitadu22/theBIGbam)                                    | v0.8.0                                                                                                       |
+| Minimap2               | [Li; minimap2](https://github.com/lh3/minimap2)                                               | v2.31 (Autocycler); otherwise unpinned; used for read mapping                                                |
+| SAMtools               | [SAMtools](https://www.htslib.org/)                                                           | Unpinned; used for alignment processing                                                                      |
+| BLAST+ (BLASTn)        | [NCBI BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi)                                        | Unpinned; used for self-alignment and genome comparisons                                                     |
+| Biopython              | [Biopython](https://biopython.org/)                                                           | v1.80 (Pharokka environment)                                                                                 |
+| TensorFlow             | [TensorFlow](https://www.tensorflow.org/)                                                     | v2.13.1 (Genotate)                                                                                           |
+| PyTorch                | [PyTorch](https://pytorch.org/)                                                               | Version unpinned in the Phold environment; v2.7.1, CUDA 12.8 wheels (Empathi); v2.8.0, CPU wheels (CheckAMG) |
+| NumPy                  | [NumPy](https://numpy.org/)                                                                   | <2.0 in the PhageTerm environment; exact version unpinned                                                    |
+| Matplotlib             | [Matplotlib](https://matplotlib.org/)                                                         | Unpinned; used by custom plotting scripts                                                                    |
+| pyCirclize             | [pyCirclize](https://github.com/moshi4/pyCirclize)                                            | Unpinned; used for Genotate contig plots                                                                     |
+| R and ggplot2          | [R](https://www.r-project.org/); [ggplot2](https://ggplot2.tidyverse.org/)                    | Unpinned in the viral-read histogram environment                                                             |
+| GNU Scientific Library | [GNU GSL](https://www.gnu.org/software/gsl/)                                                  | v2.7.0 (Pharokka environment)                                                                                |
+| Poetry                 | [Poetry](https://python-poetry.org/)                                                          | v1.8.5 (PhageTerm installation)                                                                              |
 
 ### Deposited data and reference databases
 
-| REAGENT or RESOURCE | SOURCE | IDENTIFIER |
-| --- | --- | --- |
-| geNomad database | [geNomad database](https://portal.nersc.gov/genomad/) | v1.9 |
-| CheckV database | [CheckV database](https://portal.nersc.gov/CheckV/) | v1.5 |
-| Pharokka database bundle | [Pharokka](https://github.com/gbouras13/pharokka) | v1.8 |
-| Phold database bundle | [Phold](https://github.com/gbouras13/phold) | Downloaded in August 2025 |
-| Empathi model files | [Empathi](https://huggingface.co/AlexandreBoulay/empathi) | Git LFS files retrieved at revision `7e9cccc00b29e11db1c0bfa066167e8026ef981c` |
-| Sublyme model files | [Rousseau Team; Sublyme](https://github.com/Rousseau-Team/sublyme) | Downloaded with v1.2.2 of the tool |
-| DefenseFinder models | [DefenseFinder models](https://github.com/mdmparis/defense-finder-models) | Downloaded with `defense-finder update` in October 2026 |
-| CheckAMG annotation database | [CheckAMG](https://github.com/AnantharamanLab/CheckAMG) | v1.1 |
-| vConTACT3 reference database | [vConTACT3 databases](https://vcontact3.readthedocs.io/en/latest/databases.html) | v230 |
-| LoVis4u HMM profiles | [LoVis4u](https://github.com/art-egorov/lovis4u) | Downloaded with `lovis4u --get-hmms` in October 2026 |
+| REAGENT or RESOURCE          | SOURCE                                                                           | IDENTIFIER                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| geNomad database             | [geNomad database](https://portal.nersc.gov/genomad/)                            | v1.9                                                                           |
+| CheckV database              | [CheckV database](https://portal.nersc.gov/CheckV/)                              | v1.5                                                                           |
+| Pharokka database bundle     | [Pharokka](https://github.com/gbouras13/pharokka)                                | v1.8                                                                           |
+| Phold database bundle        | [Phold](https://github.com/gbouras13/phold)                                      | Downloaded in August 2025                                                      |
+| Empathi model files          | [Empathi](https://huggingface.co/AlexandreBoulay/empathi)                        | Git LFS files retrieved at revision `7e9cccc00b29e11db1c0bfa066167e8026ef981c` |
+| Sublyme model files          | [Rousseau Team; Sublyme](https://github.com/Rousseau-Team/sublyme)               | Downloaded with v1.2.2 of the tool                                             |
+| DefenseFinder models         | [DefenseFinder models](https://github.com/mdmparis/defense-finder-models)        | Downloaded with `defense-finder update` in October 2026                        |
+| CheckAMG annotation database | [CheckAMG](https://github.com/AnantharamanLab/CheckAMG)                          | v1.1                                                                           |
+| vConTACT3 reference database | [vConTACT3 databases](https://vcontact3.readthedocs.io/en/latest/databases.html) | v230                                                                           |
+| LoVis4u HMM profiles         | [LoVis4u](https://github.com/art-egorov/lovis4u)                                 | Downloaded with `lovis4u --get-hmms` in October 2026                           |
 
 ## Citing the pipeline
 
 If you use this workflow in your research, please cite this paper:
+
 > Wai Hoe Chin, Martin Boutroux, Akira Harding, Davide Demurtas, Florian Baier, Hannes Peter (2026). Viral isolation reveals novel and diverse phages infecting natural stream biofilms. bioRxiv 2026.03.26.713887. https://doi.org/10.64898/2026.03.26.713887

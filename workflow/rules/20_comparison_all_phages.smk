@@ -69,7 +69,6 @@ rule thebigbam_annotations:
         ) > {log:q} 2>&1
         """
 
-
 rule thebigbam_calculate:
     output:
         os.path.join(RESULTS_DIR, "thebigbam", "thebigbam_ALP.db"),
