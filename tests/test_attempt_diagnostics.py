@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,29 @@ sys.path.insert(0, str(ROOT/'workflow/scripts'))
 import assembly_attempt_report as report
 
 class AttemptDiagnosticTests(unittest.TestCase):
+    def test_cached_report_resolves_separately_cached_helper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_dir = root/'report cache'
+            helper_dir = root/'helper cache'
+            script_dir.mkdir()
+            helper_dir.mkdir()
+            script = script_dir/'assembly_attempt_report.py'
+            shutil.copyfile(ROOT/'workflow/scripts/assembly_attempt_report.py', script)
+            shutil.copyfile(ROOT/'workflow/scripts/slurm_cluster_status.py',
+                            helper_dir/'slurm_cluster_status.py')
+            output = root/'reports/attempts.tsv'
+            command = [sys.executable, str(script), '--results-dir', str(root),
+                       '--output', str(output)]
+            env = dict(os.environ, PYTHONPATH='')
+            missing = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("No module named 'slurm_cluster_status'", missing.stderr)
+            env['PYTHONPATH'] = str(helper_dir)
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_text(), '\t'.join(report.FIELDS) + '\n')
+
     def run_attempt(self, root, program):
         assembly=root/'sample/assembly_attempts/filtered/flye/assembly.fasta'
         log=root/'logs/sample_filtered_flye.log'

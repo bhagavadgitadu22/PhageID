@@ -1,6 +1,5 @@
 import os
 
-
 def sample_path(value):
     import os
 
@@ -13,7 +12,6 @@ def sample_path(value):
         os.path.abspath(SAMPLES_FILE)
     )
     return os.path.normpath(os.path.join(root, value))
-
 
 def read_input_files(path):
     if not path:
@@ -30,7 +28,6 @@ def read_input_files(path):
         raise ValueError(f"No FASTQ files found in {path}")
     return files
 
-
 def sample_reads(wildcards):
     pattern = (
         rules.preprocess_reads_porechop.output[0]
@@ -39,12 +36,10 @@ def sample_reads(wildcards):
     )
     return pattern.format(sample=wildcards.sample)
 
-
 def assembly_reads(wc):
     if wc.readset == "filtered":
         return rules.remove_bacterial_contamination.output[0].format(sample=wc.sample)
     return sample_reads(wc)
-
 
 def candidate_assembly(wc):
     if wc.assembler in {"flye", "autocycler"} and not READ_FILES[wc.sample]:
@@ -57,7 +52,6 @@ def candidate_assembly(wc):
         wc.assembler,
         "assembly.fasta",
     )
-
 
 def candidate_choice(sample, readset, dependencies=None):
     import csv
@@ -93,7 +87,6 @@ def candidate_choice(sample, readset, dependencies=None):
     if autocycler_quality > primary_quality:
         return "autocycler", autocycler_quality
     return primary, primary_quality
-
 
 def selected_candidate_inputs(wc, dependencies=None):
     import csv
@@ -147,24 +140,20 @@ def selected_candidate_inputs(wc, dependencies=None):
         for name, path in values.items()
     }
 
-
 def selection_manifest_inputs(wc):
     dependencies = []
     sources = selected_candidate_inputs(wc, dependencies)
     # Track every assessed candidate, including those that lost the comparison.
     return list(dict.fromkeys(dependencies + list(sources.values())))
 
-
 def sample_mapper(wildcards):
     return "minimap2-ont" if READ_FILES[wildcards.sample] else "minimap2-sr-secondary"
-
 
 def manual_viral_fasta(wildcards):
     path = os.path.join(
         RESULTS_DIR, wildcards.sample, "manual_corrections", "circular_viruses.fasta"
     )
     return [path] if os.path.isfile(path) else []
-
 
 def active_viral_samples(wildcards):
     import csv
@@ -177,10 +166,8 @@ def active_viral_samples(wildcards):
             if row["Status"] == "ready"
         ]
 
-
 def active_sample_files(pattern):
     return lambda wildcards: expand(pattern, sample=active_viral_samples(wildcards))
-
 
 def per_sample_pipeline_inputs(wildcards):
     sample_report = checkpoints.viral_report_global.get().output.samples
@@ -196,7 +183,6 @@ def per_sample_pipeline_inputs(wildcards):
         *rules.combined_viral_annotations_per_sample.output,
     ]
     return expand(outputs, sample=wildcards.sample)
-
 
 def comparison_pipeline_inputs(wildcards):
     sample_report = checkpoints.viral_report_global.get().output.samples
@@ -214,13 +200,11 @@ def comparison_pipeline_inputs(wildcards):
         *rules.vcontact3.output,
     ]
 
-
 def assembly_databases():
     # Plassembler is only used by the long-read Autocycler rescue route.
     return ASSEMBLY_DATABASES + (
         ("plassembler_db",) if any(READ_FILES.values()) else ()
     )
-
 
 def validate_inputs(required_databases):
     problems = []
@@ -257,14 +241,12 @@ def validate_inputs(required_databases):
             "Missing pipeline inputs:\n" + "\n".join(f"- {item}" for item in problems)
         )
 
-
 def preflight_inputs(required_databases):
     def check(_wildcards):
         validate_inputs(required_databases)
         return []
 
     return check
-
 
 def autocycler_candidate_jobs(wc):
     subsets = int(rules.autocycler_subsample.params.subset_count)
@@ -287,7 +269,6 @@ def autocycler_candidate_jobs(wc):
         subset=[f"{i:02d}" for i in range(1, subsets + 1)],
     )
 
-
 def post_dereplication_pairs(wildcards):
     import csv
 
@@ -299,7 +280,6 @@ def post_dereplication_pairs(wildcards):
             (row["sample"], row["representative"])
             for row in csv.DictReader(handle, delimiter="\t")
         ]
-
 
 def post_dereplication_bams(wildcards):
     return [

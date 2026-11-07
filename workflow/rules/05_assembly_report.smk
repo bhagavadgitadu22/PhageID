@@ -97,6 +97,7 @@ rule viral_report:
         os.path.join(RESULTS_DIR, "logs", "{sample}_viral_report.log"),
     conda:
         os.path.join(ENV_DIR, "utility.yaml")
+    threads: 4
     shell:
         """python ./scripts/viral_contig_report.py --sample {wildcards.sample:q} --assembler "$(cat {input.assembler:q})" --assembly-status {input.status:q} --read-stats {input.read_stats:q} --filter-report {input.filter_report:q} --fasta {input.fasta:q} --assembly-info {input.assembly_info:q} --concatemer-report {input.concatemer:q} --dtr-report {input.dtr:q} --manual-report {input.manual:q} --checkv {input.checkv:q} --genomad {input.genomad:q} --output {output.contigs:q} --summary-output {output.summary:q} > {log:q} 2>&1"""
 
@@ -114,6 +115,8 @@ checkpoint viral_report_global:
         attempts=os.path.join(RESULTS_DIR, "reports", "assembly_attempts.tsv"),
     params:
         attempts_script=workflow.source_path("../scripts/assembly_attempt_report.py"),
+        # Source caching resolves each file separately, including imported helpers.
+        attempts_module_dir=os.path.dirname(workflow.source_path("../scripts/slurm_cluster_status.py")),
         results_dir=lambda wc, output: os.path.dirname(os.path.dirname(output.contigs)),
         contig_header="Viral_contig\tSample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tTotal_bp\tTotal_corrected_bp\tCoverage\tCoverage_without_bacteria\t%_mapped\t%_mapped_without_bacteria\tFlye_circularity\tNumber_of_concatemers_broken\tDTR_length_removed\tManual_correction\tManual_length_change_bp\tCheckV_gene_count\tCheckV_viral_genes\tCheckV_host_genes\tCheckV_quality\tMIUVIG_quality\tCheckV_completeness\tCheckV_contamination\tgeNomad_provirus\tgeNomad_taxonomy",
         sample_header="Sample\tNumber_reads\tNumber_reads_without_host\tAssembler\tAssembly_method\tAssembly_used_reads\tViral_contigs\tTotal_bp\tTotal_corrected_bp\tStatus",
@@ -133,6 +136,6 @@ checkpoint viral_report_global:
             for file in {input.summaries:q}; do
                 awk 'FNR > 1' "$file" >> {output.samples:q}
             done
-            python {params.attempts_script:q} --results-dir {params.results_dir:q} --output {output.attempts:q}
+            PYTHONPATH={params.attempts_module_dir:q} python {params.attempts_script:q} --results-dir {params.results_dir:q} --output {output.attempts:q}
         ) > {log:q} 2>&1
         """
